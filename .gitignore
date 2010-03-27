@@ -1,0 +1,13 @@
+# Always ignore the following directories
+MetroUtil/
+doc/
+include/
+lib/
+test/
+temp/
+
+# Always ignore output files
+*.o
+*.a
+*.so
+a.out
