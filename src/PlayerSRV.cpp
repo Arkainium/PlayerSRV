@@ -189,7 +189,8 @@ void PlayerSRV::Main()
 			// Is it a valid command?
 			if (mCmdCurrent) {
 				// Execute it.
-				if(mCmdThread = new boost::thread(mCmdCurrent)) {
+				mCmdThread = new boost::thread(mCmdCurrent);
+				if (mCmdThread) {
 					// Start the clock.
 					tCommand.start();
 				} else {
