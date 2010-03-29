@@ -95,7 +95,7 @@ void Position2D::Reset()
 void Position2D::Update(double linearVelocity, double angularVelocity)
 {
 	mPositionData.vel.px = linearVelocity;
-	mPositionData.vel.px = 0;
+	mPositionData.vel.py = 0;
 	mPositionData.vel.pa = angularVelocity;
 }
 
@@ -120,7 +120,7 @@ void Position2D::Update(double t)
 			// We've arrived at our destination!
 			mGoToState = false;
 		}
-	} else if (Moving() && t > 0) {
+	} else {
 		//* Update our odometry.
 
 		// Compute our new angle.

@@ -25,7 +25,11 @@ class CommandInterface {
 //*          to the base class except when explicitly allocating a new command object.
 class Command {
 	public:
+		Command() {} // Null command.
 		Command(CommandInterface* cmd);
+
+		// Returns true if and only if this is not the null command.
+		operator bool() const { return mCmd; }
 
 		// Conform to the behaviors specified in CommandInterface.
 		void operator()();

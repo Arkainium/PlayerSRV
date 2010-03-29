@@ -52,10 +52,10 @@ class PlayerSRV : public ThreadedDriver
 		//* Command queue.
 		void clear_command_queue();
 		typedef std::list<Command> CommandQueue;
-		CommandQueue::iterator mCmdCurrent;
-		CommandQueue           mCmdQueue;
-		boost::thread*         mCmdThread;
-		double                 mCmdTimeout;
+		CommandQueue   mCmdQueue;
+		Command        mCmdCurrent;
+		boost::thread* mCmdThread;
+		double         mCmdTimeout;
 
 		//* Surveyor.
 		std::string  mPortName;

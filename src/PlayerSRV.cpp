@@ -154,39 +154,48 @@ void PlayerSRV::Main()
 			if(!mCmdThread->joinable() ||
 			   mCmdThread->timed_join(boost::posix_time::milliseconds(1)) ||
 			   tCommand.elapsed() > mCmdTimeout) {
-				if (mCmdCurrent != mCmdQueue.end()) {
-					// Did the command timeout?
-					if (tCommand.elapsed() > mCmdTimeout) {
-						// Commands that timeout are a serious problem.
-						PLAYER_WARN1("PlayerSRV: %s command timed out", mCmdCurrent->id().c_str());
-						// Put the driver into an erroneous state.
-						mFunctional = false;
-						// Try to fix it.
-						PushCommand(SyncSRV(*this));
-					} else {
-						// The command finished on time.
-						// That means the driver is functioning properly.
-						mFunctional = true;
-					}
-					// Remove the command from the queue.
-					mCmdQueue.erase(mCmdCurrent);
-					mCmdCurrent = mCmdQueue.end();
+				// Did the command timeout?
+				if (tCommand.elapsed() > mCmdTimeout) {
+					// Commands that timeout are a serious problem.
+					PLAYER_WARN1("PlayerSRV: %s command timed out", mCmdCurrent.id().c_str());
+					// Put the driver into an erroneous state.
+					mFunctional = false;
+				} else {
+					// The command finished on time.
+					// That means the driver is functioning properly.
+					mFunctional = true;
 				}
 				// Kill the thread.
 				mCmdThread->interrupt();
 				delete mCmdThread;
 				mCmdThread = 0;
+				// We're no longer executing a command.
+				mCmdCurrent = Command(); // Null command.
 			}
+		}
+
+		//* Make sure that we're in a functional state.
+		//* That is, if we're not functional, then we had better be doing something about it.
+		if (!mFunctional && !mCmdThread) {
+			PushCommand(SyncSRV(*this));
 		}
 
 		//* Are we ready to execute the next command?
 		if (mCmdThread == 0 && !mCmdQueue.empty()) {
 			// Pick the command with the highest priority.
-			mCmdCurrent = max_element(mCmdQueue.begin(), mCmdQueue.end());
-			// Execute it.
-			mCmdThread = new boost::thread(*mCmdCurrent);
-			// Start the clock.
-			tCommand.start();
+			CommandQueue::iterator nextCmd = max_element(mCmdQueue.begin(), mCmdQueue.end());
+			mCmdCurrent = *nextCmd;
+			mCmdQueue.erase(nextCmd);
+			// Is it a valid command?
+			if (mCmdCurrent) {
+				// Execute it.
+				if(mCmdThread = new boost::thread(mCmdCurrent)) {
+					// Start the clock.
+					tCommand.start();
+				} else {
+					PLAYER_ERROR1("PlayerSRV: %s failed to execute", mCmdCurrent.id().c_str());
+				}
+			}
 		}
 
 		//* Process incoming messages.
@@ -229,13 +238,8 @@ int PlayerSRV::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *
 
 void PlayerSRV::PushCommand(const Command& cmd)
 {
-	//* Override any existing commands of this type whether the
-	//* command is pending on the queue or already executing.
-	if (mCmdThread && mCmdCurrent != mCmdQueue.end() && *mCmdCurrent == cmd) {
-		mCmdThread->interrupt();
-		mCmdCurrent = mCmdQueue.end();
-	}
-	remove(mCmdQueue.begin(), mCmdQueue.end(), cmd);
+	//* Override any existing commands of this type that are already on the queue.
+	mCmdQueue.erase(remove(mCmdQueue.begin(), mCmdQueue.end(), cmd), mCmdQueue.end());
 	mCmdQueue.push_back(cmd);
 }
 
@@ -243,7 +247,7 @@ void PlayerSRV::clear_command_queue()
 {
 	//* Clear the command queue, and stop any pending commands.
 	mCmdQueue.clear();
-	mCmdCurrent = mCmdQueue.end();
+	mCmdCurrent = Command();
 	if (mCmdThread) {
 		mCmdThread->interrupt();
 		delete mCmdThread;
