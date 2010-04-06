@@ -4,20 +4,30 @@ using namespace std;
 
 CommandInterface* DriveSRV(PlayerSRV& driver,
                            int leftMotor, int rightMotor,
-                           double linearVelocity, double angularVelocity)
+                           double linearVelocity, double angularVelocity,
+                           int timeToDrive)
 {
 	return new DriveSRV_Implementation(driver,
                                        leftMotor, rightMotor,
-	                                   linearVelocity, angularVelocity);
+	                                   linearVelocity, angularVelocity,
+	                                   timeToDrive);
 }
 
 DriveSRV_Implementation::DriveSRV_Implementation(PlayerSRV& driver,
                                                  int leftMotor, int rightMotor,
-                                                 double linearVelocity, double angularVelocity)
-:mPlayerDriver(driver),
+                                                 double linearVelocity, double angularVelocity,
+                                                 int timeToDrive)
+:mPlayerDriver(driver), mTimeToDrive(timeToDrive),
  mLeftMotor(leftMotor), mRightMotor(rightMotor),
  mLinearVelocity(linearVelocity), mAngularVelocity(angularVelocity)
 {
+	//* Impose physical limits.
+	if (mLeftMotor  < -127) mLeftMotor  = -127;
+	if (mLeftMotor  >  127) mLeftMotor  =  127;
+	if (mRightMotor < -127) mRightMotor = -127;
+	if (mRightMotor >  127) mRightMotor =  127;
+	if (mTimeToDrive <   0) mTimeToDrive = 0;
+	if (mTimeToDrive > 255) mTimeToDrive = 255;
 }
 
 int DriveSRV_Implementation::priority() const
@@ -39,7 +49,7 @@ void DriveSRV_Implementation::operator()()
 	bool fDone = false;
 	while (!fDone) {
 		try {
-			surveyor.drive(mLeftMotor, mRightMotor, 0);
+			surveyor.drive(mLeftMotor, mRightMotor, mTimeToDrive);
 			fDone = true;
 		} catch (...) {
 			fDone = false;
@@ -53,9 +63,10 @@ void DriveSRV_Implementation::operator()()
 		}
 	}
 
-	// Update velocity data.
+	// Update position2d data.
 	Position2D& pos = mPlayerDriver.LockPosition2D();
-	pos.Update(mLinearVelocity, mAngularVelocity);
+	pos.Update(mLinearVelocity, mAngularVelocity,
+	           (mTimeToDrive <= 0 ? -1 : mTimeToDrive/100.0));
 	mPlayerDriver.UnlockPosition2D();
 
 	mPlayerDriver.UnlockSurveyor();

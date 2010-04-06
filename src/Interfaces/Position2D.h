@@ -30,7 +30,7 @@ class Position2D
 		void Reset();
 
 		//* Update velocity (internal data only) to reflect actual (given) velocity.
-		void Update(double linearVelocity, double angularVelocity);
+		void Update(double linearVelocity, double angularVelocity, double timeToDrive);
 
 		//* Access data.
 		player_position2d_data_t Data() const { return mPositionData; }
@@ -52,17 +52,18 @@ class Position2D
 		metrobotics::Lerp<3> mAngularVelocity;
 
 		//* Machinery for handling velocity commands.
-		int SetSpeed(player_position2d_cmd_vel_t cmd, bool fGoTo = false);
-		int SetSpeed(player_pose2d_t vel, bool fGoTo = false);
+		int SetSpeed(player_position2d_cmd_vel_t cmd, int timeToDrive = 0, bool fGoTo = false);
+		int SetSpeed(player_pose2d_t vel, int timeToDrive = 0, bool fGoTo = false);
 		int Stop();
 
 		//* Machinery for handling position commands.
-		player_position2d_cmd_pos_t mGoToDestination;
+		player_position2d_cmd_pos_t mGoToDestination; // Go to where?
 		player_position2d_cmd_pos_t mGoToCheckpoint;
-		bool mGoToState;
-		int  GoTo(player_position2d_cmd_pos_t cmd);
-		bool GoToAnalysis(player_position2d_cmd_pos_t& nextPos);
-		void GoToUpdate();
+		bool   mGoToState; // Are we currently processing a position command?
+		bool   mGoToAnalysis; // Has the command been analyzed yet?
+		double mGoToDriveTimer;
+		int    GoTo(player_position2d_cmd_pos_t cmd);
+		bool   GoToAnalysis(player_position2d_cmd_pos_t& nextPos);
 };
 
 #endif

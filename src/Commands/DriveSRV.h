@@ -9,14 +9,16 @@ class PlayerSRV;
 //* Remarks: This is meant to be used in conjuction with the Command class.
 CommandInterface* DriveSRV(PlayerSRV& driver,
                            int leftMotor, int rightMotor,
-                           double linearVelocity, double angularVelocity);
+                           double linearVelocity, double angularVelocity,
+                           int timeToDrive = 0);
 
 // Command class that exectues the Surveyor's drive (motor) command.
 class DriveSRV_Implementation : public CommandInterface {
 	public:
 		DriveSRV_Implementation(PlayerSRV& driver,
 		                        int leftMotor, int rightMotor,
-		                        double linearVelocity, double angularVelocity);
+		                        double linearVelocity, double angularVelocity,
+		                        int timeToDrive = 0);
 
 		// Implement the CommandInterface.
 		void operator()();
@@ -28,6 +30,7 @@ class DriveSRV_Implementation : public CommandInterface {
 		PlayerSRV& mPlayerDriver;
 
 		// Command arguments.
+		int mTimeToDrive;
 		int mLeftMotor;
 		int mRightMotor;
 		double mLinearVelocity;

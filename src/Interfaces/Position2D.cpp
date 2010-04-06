@@ -90,13 +90,16 @@ void Position2D::Reset()
 
 	// Clear GoTo state.
 	mGoToState = false;
+	mGoToAnalysis = false;
+	mGoToDriveTimer = -1;
 }
 
-void Position2D::Update(double linearVelocity, double angularVelocity)
+void Position2D::Update(double linearVelocity, double angularVelocity, double timeToDrive)
 {
 	mPositionData.vel.px = linearVelocity;
 	mPositionData.vel.py = 0;
 	mPositionData.vel.pa = angularVelocity;
+	mGoToDriveTimer = timeToDrive;
 }
 
 bool Position2D::Moving() const
@@ -110,15 +113,40 @@ void Position2D::Update(double t)
 		//* Since the driver is apparently malfunctioning, make sure not to publish
 		//* anything lest we inadvertently fool the client into thinking that the 
 		//* interface is fresh.
-	} else if (!Moving() && mGoToState) {
-		//* We're not currently moving, but we should be because
-		//* we've got places to go and people to see!
-		if (GoToAnalysis(mGoToCheckpoint)) {
-			// Go to the next checkpoint.
-			SetSpeed(mGoToCheckpoint.vel, mGoToState);
+	} else if (mGoToState) {
+		//* Are we moving?
+		if (!Moving()) {
+			//* We're not currently moving, but we should be because
+			//* we've got places to go and people to see!
+			//* Analyze our current position if we haven't already.
+			if (!mGoToAnalysis) {
+				//* Are we there yet?
+				if (GoToAnalysis(mGoToCheckpoint)) {
+					mGoToAnalysis = true;
+				} else {
+					// We've arrived at our destination!
+					mGoToState = false;
+					mGoToAnalysis = false;
+					mGoToDriveTimer = -1;
+				}
+			}
+			//* Since we're not moving, we dare not publish any data!
 		} else {
-			// We've arrived at our destination!
-			mGoToState = false;
+			//* We're currently moving...
+			//* ...but are we actually?
+			if (mGoToDriveTimer > 0 && (mGoToDriveTimer -= t) <= 0) {
+				//* We've arrived at our checkpoint.
+				//* Update our position data.
+				mPositionData.pos = mGoToCheckpoint.pos;
+				mPositionData.vel.px = mPositionData.vel.py = mPositionData.vel.pa = 0.0;
+				//* Prepare for the next checkpoint.
+				mGoToState = true;
+				mGoToAnalysis = false;
+				mGoToDriveTimer = -1;
+			}
+			// Publish our position data.
+			mPlayerDriver.Publish(mPositionAddr, PLAYER_MSGTYPE_DATA,
+			                      PLAYER_POSITION2D_DATA_STATE, (void *)&mPositionData);
 		}
 	} else {
 		//* Update our odometry.
@@ -131,11 +159,6 @@ void Position2D::Update(double t)
 		const double dx = mPositionData.vel.px * t;
 		mPositionData.pos.px += dx * cos(mPositionData.pos.pa);
 		mPositionData.pos.py += dx * sin(mPositionData.pos.pa);
-
-		// Are we currently handling a GoTo (position) command?
-		if (mGoToState) {
-			GoToUpdate();
-		}
 
 		// Publish the updated data.
 		mPlayerDriver.Publish(mPositionAddr, PLAYER_MSGTYPE_DATA,
@@ -183,7 +206,7 @@ int Position2D::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void 
 		switch (msghdr->subtype) {
 			case PLAYER_POSITION2D_CMD_VEL: {
 				// Delegate the command to another member function.
-				return SetSpeed(*((player_position2d_cmd_vel_t*)data), false);
+				return SetSpeed(*((player_position2d_cmd_vel_t*)data));
 			} break;
 			case PLAYER_POSITION2D_CMD_POS: {
 				// Delegate the command to another member function.
@@ -199,7 +222,7 @@ int Position2D::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void 
 	return -1;
 }
 
-int Position2D::SetSpeed(player_position2d_cmd_vel_t cmd, bool fGoTo)
+int Position2D::SetSpeed(player_position2d_cmd_vel_t cmd, int timeToDrive, bool fGoTo)
 {
 	// Make sure that we're in a functional state.
 	if (!mPlayerDriver) {
@@ -210,11 +233,13 @@ int Position2D::SetSpeed(player_position2d_cmd_vel_t cmd, bool fGoTo)
 	if (!fGoTo) {
 		// No: override any current GoTo (position) command.
 		mGoToState = false;
+		mGoToAnalysis = false;
+		mGoToDriveTimer = -1;
 	}
 
 	//* Compute which values to send to the left motor and right motor.
 	int leftMotor = 0, rightMotor = 0;
-	// FIXME: keeping turning and driving mutually exclusive for now to keep things simple.
+	// Keep turning and driving mutually exclusive for now to keep things simple.
 	// Since the Surveyor is nonholonomic, ignore the y-axis velocity completely.
 	// Case 1: Turning has precedence.
 	if (cmd.vel.pa) {
@@ -255,18 +280,17 @@ int Position2D::SetSpeed(player_position2d_cmd_vel_t cmd, bool fGoTo)
 
 	//* By now we should have appropriate values for the left motor and right motor.
 	//* Use these values to construct a new command and pass it to the driver.
-	mPlayerDriver.PushCommand(DriveSRV(mPlayerDriver,
-	                                   leftMotor, rightMotor,
-	                                   cmd.vel.px, cmd.vel.pa));
+	mPlayerDriver.PushCommand(DriveSRV(mPlayerDriver, leftMotor, rightMotor,
+	                                   cmd.vel.px, cmd.vel.pa, timeToDrive));
 	return 0;
 }
 
-int Position2D::SetSpeed(player_pose2d_t vel, bool fGoTo)
+int Position2D::SetSpeed(player_pose2d_t vel, int timeToDrive, bool fGoTo)
 {
 	player_position2d_cmd_vel_t cmd;
 	memset(&cmd, 0, sizeof(player_position2d_cmd_vel_t));
 	cmd.vel = vel;
-	return SetSpeed(cmd, fGoTo);
+	return SetSpeed(cmd, timeToDrive, fGoTo);
 }
 
 int Position2D::Stop()
@@ -274,7 +298,7 @@ int Position2D::Stop()
 	if (Moving()) {
 		player_position2d_cmd_vel_t stop;
 		memset(&stop, 0, sizeof(player_position2d_cmd_vel_t));
-		return SetSpeed(stop, mGoToState);
+		return SetSpeed(stop, 0, mGoToState);
 	}
 	return 0;
 }
@@ -287,8 +311,10 @@ int Position2D::GoTo(player_position2d_cmd_pos_t cmd)
 	}
 
 	// Override any previous GoTo (position) command.
-	mGoToDestination = cmd;
 	mGoToState = true;
+	mGoToAnalysis = false;
+	mGoToDestination = cmd;
+	mGoToDriveTimer = -1;
 
 	//* In order for GoTo processing to commence on the next update,
 	//* we have to make sure that we're not already moving.
@@ -297,37 +323,39 @@ int Position2D::GoTo(player_position2d_cmd_pos_t cmd)
 
 bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 {
-	// Allow a certain degree of error when comparing angles.
+	//* Allow a certain degree of error when comparing angles.
 	static RealEquality eqAngles((1.0/180.0)*PI);
 
-	// Allow a certain margin of error when comparing distances.
+	//* Allow a certain margin of error when comparing distances.
 	static RealEquality eqDistances(0.01);
 
-	// Allow a certain margin of error when comparing velocities.
+	//* Allow a certain margin of error when comparing velocities.
 	static RealEquality eqVelocities(0.01);
 
-	// Make sure that we're currently handling a goto command.
+	//* Make sure that we're currently handling a goto command.
 	if (!mGoToState) {
 		return false;
 	}
 
-	// Compute the offsets of the new position from the current position.
-	// Think of this as a coordinate system that is local to our robot.
+	//* Compute the offsets of the new position from the current position.
+	//* Think of this as a coordinate system that is local to our robot.
 	double dx = mGoToDestination.pos.px - mPositionData.pos.px;
 	double dy = mGoToDestination.pos.py - mPositionData.pos.py;
 
-	// Compute the distance of the line segment formed by the two positions.
-	// Think of this as the radius of the circle centered at our robot.
+	//* Compute the distance of the line segment formed by the two positions.
+	//* Think of this as the radius of the circle centered at our robot.
 	double distance = sqrt(pow(dx, 2) + pow(dy, 2));
 	if (eqDistances(distance, 0.0)) {
 		distance = 0.0;
 	}
 
-	// Compute the direction (angle) of the new position relative to the current position.
-	// That is, how much and in which direction must we turn in order to face the new position.
+	//* Compute the direction (angle) of the new position relative to the current position.
+	//* That is, how much and in which direction must we turn in order to face the new position.
 	double theta = 0.0;
 	if (!eqDistances(distance, 0.0)) {
-		theta = __normalizeAngle(acos(dx / distance) - mPositionData.pos.pa);
+		int direction = asin(dy / distance) >= 0 ? 1 : -1;
+		theta = direction * acos(dx / distance);
+		theta = __normalizeAngle(theta - mPositionData.pos.pa);
 	} else if (fabs(mGoToDestination.pos.pa) <= TWOPI) {
 		theta = __normalizeAngle(mGoToDestination.pos.pa - mPositionData.pos.pa);
 	}
@@ -336,10 +364,12 @@ bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 	}
 
 	//* Decompose the final destination into a sequence of checkpoints.
+
+	//* Do we need to turn?
 	if (!eqAngles(theta, 0.0)) {
-		// Command: turn towards the new position.
 		memset(&nextPos, 0, sizeof(player_position2d_cmd_pos_t));
-		nextPos.pos.pa = mPositionData.pos.pa + theta;
+		// Our current position.
+		nextPos.pos = mPositionData.pos;
 		// Determine how fast we should travel to the new position.
 		nextPos.vel.pa = theta > 0.0 ?  fabs(mGoToDestination.vel.pa)
 		                             : -fabs(mGoToDestination.vel.pa);
@@ -347,13 +377,27 @@ bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 			nextPos.vel.pa = theta > 0.0 ? mAngularVelocity.max()[0]
 			                             : mAngularVelocity.min()[0];
 		}
+		// Determine how long it will take to get there.
+		int timeToDrive = floor(100 * (theta / nextPos.vel.pa) + 0.5);
+		// Surveyor's maximum time to drive is 255 centiseconds per command.
+		if (timeToDrive > 255) {
+			// We need to decompose the command even further!
+			theta = 2.55 * nextPos.vel.pa;
+			timeToDrive = 255;
+		}
+		// Our new position.
+		nextPos.pos.pa = __normalizeAngle(nextPos.pos.pa + theta);
+		// Make it so!
+		SetSpeed(nextPos.vel, timeToDrive, true);
 		return true;
 	}
+
+	//* Do we need to drive?
 	if (!eqDistances(distance, 0.0)) {
 		// Command: drive to the new position.
 		memset(&nextPos, 0, sizeof(player_position2d_cmd_pos_t));
-		nextPos.pos.px = mGoToDestination.pos.px;
-		nextPos.pos.py = mGoToDestination.pos.py;
+		// Our current position.
+		nextPos.pos = mPositionData.pos;
 		// Determine how fast we should travel to the new position.
 		nextPos.vel.px = distance > 0.0 ?  fabs(mGoToDestination.vel.px)
 		                                : -fabs(mGoToDestination.vel.px);
@@ -361,37 +405,21 @@ bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 			nextPos.vel.px = distance > 0.0 ? mLinearVelocity.max()[0]
 			                                : mLinearVelocity.min()[0];
 		}
+		// Determine how long it will take to get there.
+		int timeToDrive =  floor(100 * (distance / nextPos.vel.px) + 0.5);
+		// Surveyor's maximum time to drive is 2.55 seconds per command.
+		if (timeToDrive > 255) {
+			// We need to decompose the command even further!
+			distance = 2.55 * nextPos.vel.px;
+			timeToDrive = 255;
+		}
+		// Our new position.
+		nextPos.pos.px += distance * cos(nextPos.pos.pa);
+		nextPos.pos.py += distance * sin(nextPos.pos.pa);
+		// Make it so!
+		SetSpeed(nextPos.vel, timeToDrive, true);
 		return true;
 	}
 
 	return false;
-}
-
-void Position2D::GoToUpdate()
-{
-	// Are we currently handling a GoTo (position) command?
-	if (mGoToState && Moving()) {
-		// Analyze our current position with respect to the final destination.
-		player_position2d_cmd_pos_t next;
-		if (GoToAnalysis(next)) {
-			// Are we turning?
-			if (mPositionData.vel.pa) {
-				// Should we still be turning?
-				if ((next.vel.pa == 0) ||
-				    ((next.vel.pa > 0) != (mPositionData.vel.pa > 0))) {
-					Stop();
-				}
-			// Are we driving?
-			} else if (mPositionData.vel.px) {
-				// Should we still be driving?
-				if ((next.vel.px == 0) ||
-				    ((next.vel.px > 0) != (mPositionData.vel.px > 0))) {
-					Stop();
-				}
-			}
-		} else {
-			// We're here!
-			Stop();
-		}
-	}
 }
