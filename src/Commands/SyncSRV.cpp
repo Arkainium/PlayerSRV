@@ -25,22 +25,30 @@ string SyncSRV_Implementation::id() const
 
 void SyncSRV_Implementation::operator()()
 {
-	Surveyor& surveyor = mPlayerDriver.LockSurveyor();
+	bool lockedSurveyor = false;
+	try {
+		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
+		lockedSurveyor = true;
 
-	bool fDone = false;
-	while (!fDone) {
-		try {
-			fDone = surveyor.sync(1);
-		} catch (...) {
-			fDone = false;
-			// Have we had enough yet?
+		bool fDone = false;
+		while (!fDone) {
 			try {
-				boost::this_thread::interruption_point();
-			} catch (boost::thread_interrupted) {
-				fDone = true;
+				fDone = surveyor.sync(1);
+			} catch (...) {
+				fDone = false;
+				// Have we had enough yet?
+				try {
+					boost::this_thread::interruption_point();
+				} catch (boost::thread_interrupted) {
+					fDone = true;
+				}
 			}
 		}
-	}
 
-	mPlayerDriver.UnlockSurveyor();
+		mPlayerDriver.UnlockSurveyor();
+	} catch (...) {
+		if (lockedSurveyor) {
+			mPlayerDriver.UnlockSurveyor();
+		}
+	}
 }

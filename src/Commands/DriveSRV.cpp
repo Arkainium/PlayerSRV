@@ -44,30 +44,43 @@ string DriveSRV_Implementation::id() const
 
 void DriveSRV_Implementation::operator()()
 {
-	Surveyor& surveyor = mPlayerDriver.LockSurveyor();
+	bool lockedSurveyor = false;
+	bool lockedPosition = false;
+	try {
+		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
+		lockedSurveyor = true;
 
-	bool fDone = false;
-	while (!fDone) {
-		try {
-			surveyor.drive(mLeftMotor, mRightMotor, mTimeToDrive);
-			fDone = true;
-		} catch (...) {
-			fDone = false;
-			// Have we had enough yet?
+		bool fDone = false;
+		while (!fDone) {
 			try {
-				boost::this_thread::interruption_point();
-			} catch (boost::thread_interrupted) {
-				mPlayerDriver.UnlockSurveyor();
-				return;
+				surveyor.drive(mLeftMotor, mRightMotor, mTimeToDrive);
+				fDone = true;
+			} catch (...) {
+				fDone = false;
+				// Have we had enough yet?
+				try {
+					boost::this_thread::interruption_point();
+				} catch (boost::thread_interrupted) {
+					mPlayerDriver.UnlockSurveyor();
+					return;
+				}
 			}
 		}
+
+		// Update position2d data.
+		Position2D& pos = mPlayerDriver.LockPosition2D();
+		lockedPosition = true;
+		pos.Update(mLinearVelocity, mAngularVelocity,
+				   (mTimeToDrive <= 0 ? -1 : mTimeToDrive/100.0));
+		mPlayerDriver.UnlockPosition2D();
+
+		mPlayerDriver.UnlockSurveyor();
+	} catch (...) {
+		if (lockedPosition) {
+			mPlayerDriver.UnlockPosition2D();
+		}
+		if (lockedSurveyor) {
+			mPlayerDriver.UnlockSurveyor();
+		}
 	}
-
-	// Update position2d data.
-	Position2D& pos = mPlayerDriver.LockPosition2D();
-	pos.Update(mLinearVelocity, mAngularVelocity,
-	           (mTimeToDrive <= 0 ? -1 : mTimeToDrive/100.0));
-	mPlayerDriver.UnlockPosition2D();
-
-	mPlayerDriver.UnlockSurveyor();
 }
