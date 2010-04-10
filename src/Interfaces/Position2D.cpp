@@ -377,8 +377,8 @@ bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 			nextPos.vel.pa = theta > 0.0 ? mAngularVelocity.max()[0]
 			                             : mAngularVelocity.min()[0];
 		}
-		// Determine how long it will take to get there.
-		int timeToDrive = floor(100 * (theta / nextPos.vel.pa) + 0.5);
+		// Determine how long it will take to get there (in centiseconds).
+		int timeToDrive = ceil(100 * (theta / nextPos.vel.pa));
 		// Surveyor's maximum time to drive is 255 centiseconds per command.
 		if (timeToDrive > 255) {
 			// We need to decompose the command even further!
@@ -405,8 +405,8 @@ bool Position2D::GoToAnalysis(player_position2d_cmd_pos_t& nextPos)
 			nextPos.vel.px = distance > 0.0 ? mLinearVelocity.max()[0]
 			                                : mLinearVelocity.min()[0];
 		}
-		// Determine how long it will take to get there.
-		int timeToDrive =  floor(100 * (distance / nextPos.vel.px) + 0.5);
+		// Determine how long it will take to get there (in centiseconds).
+		int timeToDrive =  ceil(100 * (distance / nextPos.vel.px));
 		// Surveyor's maximum time to drive is 2.55 seconds per command.
 		if (timeToDrive > 255) {
 			// We need to decompose the command even further!
