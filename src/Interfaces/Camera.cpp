@@ -35,7 +35,7 @@ void Camera::ReadConfig(ConfigFile& cf, int section)
 
 void Camera::Start()
 {
-	if (!mActive) {
+	if (!mActive && mPlayerDriver) {
 		// Apply the camera size.
 		bool lockedSurveyor = false;
 		try {
@@ -83,6 +83,7 @@ void Camera::Publish(const Picture& pic)
 		//* Since the driver is apparently malfunctioning, make sure not to publish
 		//* anything lest we inadvertently fool the client into thinking that the 
 		//* interface is fresh.
+		Stop();
 	} else {
 		// Publish our data.
 		player_camera_data_t camData;
@@ -96,8 +97,8 @@ void Camera::Publish(const Picture& pic)
 		camData.image_count = pic.size();
 		camData.image = pic.data();
 		if (camData.image) {
-		mPlayerDriver.Publish(mCameraAddr, PLAYER_MSGTYPE_DATA,
-		                      PLAYER_CAMERA_DATA_STATE, (void *)&camData);
+			mPlayerDriver.Publish(mCameraAddr, PLAYER_MSGTYPE_DATA,
+			                      PLAYER_CAMERA_DATA_STATE, (void *)&camData);
 		}
 		if (mActive) {
 			mPlayerDriver.PushCommand(TakePictureSRV(mPlayerDriver));

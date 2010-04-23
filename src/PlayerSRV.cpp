@@ -129,12 +129,6 @@ int PlayerSRV::MainSetup()
 	}
 	mPosition2DMutex.unlock();
 
-	mCameraMutex.lock();
-	if (mCamera) {
-		mCamera->Restart();
-	}
-	mCameraMutex.unlock();
-
 	//* We're fully activated now.
 	//* Assume a functional state.
 	mFunctional = true;
