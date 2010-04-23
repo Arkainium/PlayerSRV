@@ -16,6 +16,7 @@
 
 #include <string>
 #include "metrobotics.h"
+#include "Picture.h"
 
 /************************************************************************/
 /* Surveyor Class                                                       */
@@ -29,8 +30,18 @@ class Surveyor
 		// Exceptions.
 		class NotResponding {};
 		class OutOfSync {};
+		class OutOfMemory {};
 		class InvalidSpeed {};
 		class InvalidDuration {};
+		class InvalidResolution {};
+
+		// Camera options.
+		enum CameraResolution {
+			CAMSIZE_80x64,
+			CAMSIZE_160x128,
+			CAMSIZE_320x240,
+			CAMSIZE_640x480
+		};
 
 		/**
 		 * \brief    Toggle class-wide debugging.
@@ -80,6 +91,9 @@ class Surveyor
 		 *                       0 (the default) drives indefinitely
 		 */
 		void drive(int left, int right, int duration = 0);
+
+		void setResolution(CameraResolution res = CAMSIZE_160x128);
+		const Picture takePicture();
 
 	private:
 		// Don't allow copying or assigning of Surveyor objects!

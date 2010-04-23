@@ -16,6 +16,7 @@
 //* We need some forward declarations due to the circular nature
 //* of the relationships between our classes.
 class Position2D;
+class Camera;
 
 class PlayerSRV : public ThreadedDriver
 {
@@ -43,6 +44,7 @@ class PlayerSRV : public ThreadedDriver
 		//*          mutual exclusion will block the thread of execution.
 		Surveyor& LockSurveyor(); void UnlockSurveyor();
 		Position2D& LockPosition2D(); void UnlockPosition2D();
+		Camera& LockCamera(); void UnlockCamera();
 
 	private:
 		//* Internal state of the driver.
@@ -65,6 +67,8 @@ class PlayerSRV : public ThreadedDriver
 		//* Player interfaces.
 		Position2D*  mPosition2D;
 		boost::mutex mPosition2DMutex;
+		Camera*      mCamera;
+		boost::mutex mCameraMutex;
 };
 
 //* Standard Player Protocol.

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <vector>
 
 using namespace std;
 using namespace metrobotics;
@@ -124,4 +125,122 @@ void Surveyor::drive(int l, int r, int t)
 		__dbg(signature.str() + ": no response");
 		throw Surveyor::NotResponding();
 	}
+}
+
+void Surveyor::setResolution(CameraResolution res)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::setResolution()";
+
+	// Determine which command to send.
+	char cmd;
+	switch (res) {
+		case CAMSIZE_80x64:
+			cmd = 'a';
+			break;
+		case CAMSIZE_160x128:
+			cmd = 'b';
+			break;
+		case CAMSIZE_320x240:
+			cmd = 'c';
+			break;
+		case CAMSIZE_640x480:
+			cmd = 'A';
+			break;
+		default:
+			__dbg(signature.str() + ": invalid camera resolution");
+			throw Surveyor::InvalidResolution();
+			break;
+	}
+
+	// Make it so.
+	try {
+		mDevLink.flush();
+		mDevLink.putByte(cmd);
+		mDevLink.flushOutput();
+		string echo;
+		echo += mDevLink.getByte();
+		echo += mDevLink.getByte();
+		if (echo.find(string("#") + cmd) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		throw Surveyor::NotResponding();
+	}
+}
+
+const Picture Surveyor::takePicture()
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::takePicture()";
+
+	Picture ret;
+	try {
+		mDevLink.flush();
+		mDevLink.putByte('I');
+		mDevLink.flushOutput();
+		string echo;
+		echo += mDevLink.getByte(); // '#'
+		echo += mDevLink.getByte(); // '#'
+		echo += mDevLink.getByte(); // 'I'
+		echo += mDevLink.getByte(); // 'M'
+		echo += mDevLink.getByte(); // 'J'
+		if (echo.find("##IMJ") == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+
+		// Get the frame size in pixels.
+		unsigned char frame_resolution = mDevLink.getByte();
+		size_t width = 0, height = 0; // Dimensions.
+		switch (frame_resolution) {
+			case '1': {
+				width  = 80;
+				height = 64;
+			} break;
+			case '3': {
+				width  = 160;
+				height = 128;
+			} break;
+			case '5': {
+				width  = 320;
+				height = 240;
+			} break;
+			case '7': {
+				width  = 640;
+				height = 480;
+			} break;
+		}
+
+		// Get the frame size in bytes.
+		unsigned long frame_size = mDevLink.getByte();
+		frame_size += (mDevLink.getByte() * 256);
+		frame_size += (mDevLink.getByte() * 256 * 256);
+		frame_size += (mDevLink.getByte() * 256 * 256 * 256);
+
+		// Image data.
+		unsigned char *frame_buffer = new unsigned char[frame_size];
+		if (!frame_buffer) {
+			__dbg(signature.str() + ": failed to allocate memory for the image data");
+			throw Surveyor::OutOfMemory();
+		} else {
+			try {
+				// Read it.
+				mDevLink.getBlock(frame_buffer, frame_size);
+			} catch (...) {
+				delete[] frame_buffer;
+				throw;
+			}
+			// Save it.
+			ret = Picture(frame_buffer, frame_size, width, height);
+		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		throw Surveyor::NotResponding();
+	}
+	return ret;
 }

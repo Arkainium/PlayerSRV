@@ -33,3 +33,6 @@ clean:
 # Individual source targets
 Position2D.o: Position2D.cpp Position2D.h ../PlayerSRV.h ../Commands/DriveSRV.h
 	$(CC) -c $(CFLAGS) Position2D.cpp
+
+Camera.o: Camera.cpp Camera.h ../PlayerSRV.h ../Commands/TakePictureSRV.h
+	$(CC) -c $(CFLAGS) Camera.cpp

@@ -10,7 +10,7 @@ using namespace metrobotics;
 //* Driver-specific initialization: performed once upon startup of the server.
 PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 : ThreadedDriver(cf, section, false, PLAYER_MSGQUEUE_DEFAULT_MAXLEN),
-  mCmdThread(0), mSurveyor(0), mPosition2D(0)
+  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0)
 {
 	//* Configure the driver by reading the configuration file.
 
@@ -49,6 +49,21 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 	} else {
 		PLAYER_WARN("PlayerSRV: not providing a position2D interface");
 	}
+
+	//* Are we providing a camera interface?
+	if ((cf->ReadDeviceAddr(&tempAddr, section, "provides", PLAYER_CAMERA_CODE, -1, 0) == 0) &&
+	    (AddInterface(tempAddr) == 0)) {
+		mCameraMutex.lock();
+		mCamera = new Camera(*this, tempAddr);
+		if (mCamera == 0) {
+			PLAYER_ERROR("PlayerSRV: failed to allocate memory for camera");
+		} else {
+			mCamera->ReadConfig(*cf, section);
+		}
+		mCameraMutex.unlock();
+	} else {
+		PLAYER_WARN("PlayerSRV: not providing a camera interface");
+	}
 }
 
 //* Driver-specific shutdown: performed once upon shutdown of the server.
@@ -61,6 +76,13 @@ PlayerSRV::~PlayerSRV()
 		mPosition2D = 0;
 	}
 	mPosition2DMutex.unlock();
+
+	mCameraMutex.lock();
+	if (mCamera) {
+		delete mCamera;
+		mCamera = 0;
+	}
+	mCameraMutex.unlock();
 }
 
 //* Device-specific initialization: called everytime the driver goes from
@@ -97,6 +119,9 @@ int PlayerSRV::MainSetup()
 		return -1;
 	}
 
+	//* Clear the command queue, and stop any pending commands.
+	clear_command_queue();
+
 	//* Reset our interfaces.
 	mPosition2DMutex.lock();
 	if (mPosition2D) {
@@ -104,8 +129,11 @@ int PlayerSRV::MainSetup()
 	}
 	mPosition2DMutex.unlock();
 
-	//* Clear the command queue, and stop any pending commands.
-	clear_command_queue();
+	mCameraMutex.lock();
+	if (mCamera) {
+		mCamera->Restart();
+	}
+	mCameraMutex.unlock();
 
 	//* We're fully activated now.
 	//* Assume a functional state.
@@ -118,6 +146,13 @@ int PlayerSRV::MainSetup()
 void PlayerSRV::MainQuit()
 {
 	PLAYER_MSG0(1, "PlayerSRV: deactivating the driver");
+
+	//* Stop our interfaces.
+	mCameraMutex.lock();
+	if (mCamera) {
+		mCamera->Stop();
+	}
+	mCameraMutex.unlock();
 
 	//* Clear the command queue, and stop any pending commands.
 	clear_command_queue();
@@ -209,6 +244,13 @@ void PlayerSRV::Main()
 			tPosition.start();
 		}
 		mPosition2DMutex.unlock();
+		mCameraMutex.lock();
+		if (mCamera) {
+			if (!(mCamera->Active())) {
+				mCamera->Restart();
+			}
+		}
+		mCameraMutex.unlock();
 
 		//* Don't exceed the minimum cycle time.
 		double timeLeft = mMinCycleTime - tCycle.elapsed();
@@ -284,6 +326,21 @@ Position2D& PlayerSRV::LockPosition2D()
 void PlayerSRV::UnlockPosition2D()
 {
 	mPosition2DMutex.unlock();
+}
+
+Camera& PlayerSRV::LockCamera()
+{
+	mCameraMutex.lock();
+	if (mCamera == 0) {
+		throw logic_error("PlayerSRV::LockCamera(): null pointer exception");
+	} else {
+		return *mCamera;
+	}
+}
+
+void PlayerSRV::UnlockCamera()
+{
+	mCameraMutex.unlock();
 }
 
 // Driver Class Factory

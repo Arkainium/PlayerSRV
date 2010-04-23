@@ -41,3 +41,7 @@ SyncSRV.o: SyncSRV.cpp SyncSRV.h Command.h \
 DriveSRV.o: DriveSRV.cpp DriveSRV.h Command.h \
             ../PlayerSRV.h ../Surveyor/Surveyor.h ../Interfaces/Position2D.h
 	$(CC) -c $(CFLAGS) DriveSRV.cpp
+
+TakePictureSRV.o: TakePictureSRV.cpp TakePictureSRV.h Command.h \
+            ../PlayerSRV.h ../Surveyor/Surveyor.h ../Interfaces/Camera.h
+	$(CC) -c $(CFLAGS) TakePictureSRV.cpp

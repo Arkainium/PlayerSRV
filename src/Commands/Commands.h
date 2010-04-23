@@ -4,5 +4,6 @@
 #include "Command.h"
 #include "SyncSRV.h"
 #include "DriveSRV.h"
+#include "TakePictureSRV.h"
 
 #endif

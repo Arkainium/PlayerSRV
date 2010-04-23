@@ -280,8 +280,10 @@ int Position2D::SetSpeed(player_position2d_cmd_vel_t cmd, int timeToDrive, bool 
 
 	//* By now we should have appropriate values for the left motor and right motor.
 	//* Use these values to construct a new command and pass it to the driver.
-	mPlayerDriver.PushCommand(DriveSRV(mPlayerDriver, leftMotor, rightMotor,
-	                                   cmd.vel.px, cmd.vel.pa, timeToDrive));
+	if (leftMotor || rightMotor || Moving()) {
+		mPlayerDriver.PushCommand(DriveSRV(mPlayerDriver, leftMotor, rightMotor,
+		                                   cmd.vel.px, cmd.vel.pa, timeToDrive));
+	}
 	return 0;
 }
 
