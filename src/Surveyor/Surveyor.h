@@ -17,6 +17,7 @@
 #include <string>
 #include "metrobotics.h"
 #include "Picture.h"
+#include "IRArray.h"
 
 /************************************************************************/
 /* Surveyor Class                                                       */
@@ -94,6 +95,7 @@ class Surveyor
 
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();
+		const IRArray bounceIR();
 
 	private:
 		// Don't allow copying or assigning of Surveyor objects!

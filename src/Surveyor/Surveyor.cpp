@@ -29,8 +29,11 @@ const double Surveyor::gHeight = 0.0800; // π inches.
 Surveyor::Surveyor(const string& devName)
 :mDevLink(devName.c_str(), B115200)
 {
-	// FIXME: What's a reasonable timeout?
-	mDevLink.timeout(1000);
+	// Set the global timeout to 2.6 seconds because a timed drive
+	// can block all communication for up to 2.55 seconds.
+	mDevLink.timeout(2600);
+
+	// Establish a connection.
 	__dbg("Surveyor: connecting to " + devName);
 	sync(0); // block indefinitely until synced
 	__dbg("Surveyor: connection established");
@@ -238,6 +241,45 @@ const Picture Surveyor::takePicture()
 			// Save it.
 			ret = Picture(frame_buffer, frame_size, width, height);
 		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		throw Surveyor::NotResponding();
+	}
+	return ret;
+}
+
+const IRArray Surveyor::bounceIR()
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::bounceIR()";
+
+	IRArray ret;
+	try {
+		mDevLink.flush();
+		mDevLink.putByte('B');
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##BounceIR - ";
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+
+		// Get the data.
+		stringstream ss(res.substr(key.length()));
+		int ir[4];
+		ss >> ir[0];
+		ss >> ir[1];
+		ss >> ir[2];
+		ss >> ir[3];
+		if (!ss) {
+			__dbg(signature.str() + ": incomplete");
+			throw Surveyor::OutOfSync();
+		}
+		// Save the data.
+		ret = IRArray(ir[0], ir[1], ir[2], ir[3]);
+
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");
 		throw Surveyor::NotResponding();

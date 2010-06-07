@@ -10,7 +10,7 @@ using namespace metrobotics;
 //* Driver-specific initialization: performed once upon startup of the server.
 PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 : ThreadedDriver(cf, section, false, PLAYER_MSGQUEUE_DEFAULT_MAXLEN),
-  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0)
+  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0), mRanger(0)
 {
 	//* Configure the driver by reading the configuration file.
 
@@ -64,6 +64,21 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 	} else {
 		PLAYER_WARN("PlayerSRV: not providing a camera interface");
 	}
+
+	//* Are we providing a ranger interface?
+	if ((cf->ReadDeviceAddr(&tempAddr, section, "provides", PLAYER_RANGER_CODE, -1, 0) == 0) &&
+	    (AddInterface(tempAddr) == 0)) {
+		mRangerMutex.lock();
+		mRanger = new Ranger(*this, tempAddr);
+		if (mRanger == 0) {
+			PLAYER_ERROR("PlayerSRV: failed to allocate memory for ranger");
+		} else {
+			mRanger->ReadConfig(*cf, section);
+		}
+		mRangerMutex.unlock();
+	} else {
+		PLAYER_WARN("PlayerSRV: not providing a ranger interface");
+	}
 }
 
 //* Driver-specific shutdown: performed once upon shutdown of the server.
@@ -83,6 +98,13 @@ PlayerSRV::~PlayerSRV()
 		mCamera = 0;
 	}
 	mCameraMutex.unlock();
+
+	mRangerMutex.lock();
+	if (mRanger) {
+		delete mRanger;
+		mRanger = 0;
+	}
+	mRangerMutex.unlock();
 }
 
 //* Device-specific initialization: called everytime the driver goes from
@@ -119,16 +141,6 @@ int PlayerSRV::MainSetup()
 		return -1;
 	}
 
-	//* Clear the command queue, and stop any pending commands.
-	clear_command_queue();
-
-	//* Reset our interfaces.
-	mPosition2DMutex.lock();
-	if (mPosition2D) {
-		mPosition2D->Reset();
-	}
-	mPosition2DMutex.unlock();
-
 	//* We're fully activated now.
 	//* Assume a functional state.
 	mFunctional = true;
@@ -141,12 +153,24 @@ void PlayerSRV::MainQuit()
 {
 	PLAYER_MSG0(1, "PlayerSRV: deactivating the driver");
 
-	//* Stop our interfaces.
+	//* De-activate our interfaces.
+	mRangerMutex.lock();
+	if (mRanger) {
+		mRanger->Stop();
+	}
+	mRangerMutex.unlock();
+
 	mCameraMutex.lock();
 	if (mCamera) {
 		mCamera->Stop();
 	}
 	mCameraMutex.unlock();
+
+	mPosition2DMutex.lock();
+	if (mPosition2D) {
+		mPosition2D->Reset();
+	}
+	mPosition2DMutex.unlock();
 
 	//* Clear the command queue, and stop any pending commands.
 	clear_command_queue();
@@ -238,6 +262,7 @@ void PlayerSRV::Main()
 			tPosition.start();
 		}
 		mPosition2DMutex.unlock();
+
 		mCameraMutex.lock();
 		if (mCamera) {
 			if (!(mCamera->Active())) {
@@ -245,6 +270,14 @@ void PlayerSRV::Main()
 			}
 		}
 		mCameraMutex.unlock();
+
+		mRangerMutex.lock();
+		if (mRanger) {
+			if (!(mRanger->Active())) {
+				mRanger->Restart();
+			}
+		}
+		mRangerMutex.unlock();
 
 		//* Don't exceed the minimum cycle time.
 		double timeLeft = mMinCycleTime - tCycle.elapsed();
@@ -269,6 +302,14 @@ int PlayerSRV::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *
 		}
 	}
 	mPosition2DMutex.unlock();
+
+	mRangerMutex.lock();
+	if (mRanger) {
+		if (Message::MatchMessage(msghdr, -1, -1, mRanger->Address())) {
+			ret = mRanger->ProcessMessage(queue, msghdr, data);
+		}
+	}
+	mRangerMutex.unlock();
 
 	return ret;
 }
@@ -335,6 +376,21 @@ Camera& PlayerSRV::LockCamera()
 void PlayerSRV::UnlockCamera()
 {
 	mCameraMutex.unlock();
+}
+
+Ranger& PlayerSRV::LockRanger()
+{
+	mRangerMutex.lock();
+	if (mRanger == 0) {
+		throw logic_error("PlayerSRV::LockRanger(): null pointer exception");
+	} else {
+		return *mRanger;
+	}
+}
+
+void PlayerSRV::UnlockRanger()
+{
+	mRangerMutex.unlock();
 }
 
 // Driver Class Factory

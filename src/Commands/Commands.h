@@ -5,5 +5,6 @@
 #include "SyncSRV.h"
 #include "DriveSRV.h"
 #include "TakePictureSRV.h"
+#include "BounceSRV.h"
 
 #endif

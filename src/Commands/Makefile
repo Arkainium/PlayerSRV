@@ -45,3 +45,7 @@ DriveSRV.o: DriveSRV.cpp DriveSRV.h Command.h \
 TakePictureSRV.o: TakePictureSRV.cpp TakePictureSRV.h Command.h \
             ../PlayerSRV.h ../Surveyor/Surveyor.h ../Interfaces/Camera.h
 	$(CC) -c $(CFLAGS) TakePictureSRV.cpp
+
+BounceSRV.o: BounceSRV.cpp BounceSRV.h Command.h \
+            ../PlayerSRV.h ../Surveyor/Surveyor.h
+	$(CC) -c $(CFLAGS) BounceSRV.cpp
