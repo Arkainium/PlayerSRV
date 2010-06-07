@@ -43,7 +43,8 @@ class Ranger
 
 		//* Internal state of the interface.
 		//* Active means that we're repeatedly bouncing infrared.
-		bool mActive;
+		bool mActive; // actual state
+		bool mConfState; // state specified by client
 };
 
 #endif

@@ -7,7 +7,7 @@ const int NUM_IR = 4;
 enum { IRFRONT = 0, IRLEFT = 1, IRBACK = 2, IRRIGHT = 3 };
 
 Ranger::Ranger(PlayerSRV& playerDriver, player_devaddr_t addr)
-:mPlayerDriver(playerDriver), mRangerAddr(addr), mActive(false)
+:mPlayerDriver(playerDriver), mRangerAddr(addr), mActive(false), mConfState(true)
 {
 	// Clear our data structures.
 	memset(&mRangerData, 0, sizeof(player_ranger_data_intns_t));
@@ -96,6 +96,17 @@ int Ranger::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *dat
 			case PLAYER_RANGER_REQ_POWER: {
 			} break;
 			case PLAYER_RANGER_REQ_INTNS: {
+				if (data) {
+					mConfState = ((player_ranger_intns_config_t*)data)->state;
+					if (mConfState && !mActive) {
+						Start();
+					} else if (mActive && !mConfState) {
+						Stop();
+					}
+				}
+				// Acknowledge the request.
+				mPlayerDriver.Publish(mRangerAddr, queue, PLAYER_MSGTYPE_RESP_ACK, msghdr->subtype);
+				return 0;
 			} break;
 			case PLAYER_RANGER_REQ_SET_CONFIG: {
 			} break;
@@ -113,7 +124,7 @@ int Ranger::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *dat
 
 void Ranger::Start()
 {
-	if (!mActive && mPlayerDriver) {
+	if (mConfState && !mActive && mPlayerDriver) {
 		mActive = true;
 		mPlayerDriver.PushCommand(BounceSRV(mPlayerDriver));
 	}
@@ -140,7 +151,7 @@ void Ranger::Publish(const IRArray& ir)
 		// Publish our data.
 		mPlayerDriver.Publish(mRangerAddr, PLAYER_MSGTYPE_DATA,
 		                      PLAYER_RANGER_DATA_INTNS, (void *)&mRangerData);
-		if (mActive) {
+		if (mActive && mConfState) {
 			mPlayerDriver.PushCommand(BounceSRV(mPlayerDriver));
 		}
 	}
