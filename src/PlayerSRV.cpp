@@ -28,7 +28,7 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 
 	//* Initialize the maximum time allotted for an executing command.
 	mCmdTimeout = cf->ReadFloat(section, "command_timeout", -1);
-	if (mCmdTimeout < 1.0) {
+	if (mCmdTimeout < 3.0) {
 		mCmdTimeout = 10.0; // seconds
 	}
 
