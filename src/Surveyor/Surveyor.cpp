@@ -293,16 +293,9 @@ const IRArray Surveyor::bounceIR()
 		}
 
 		// Get the data.
-		stringstream ss(res.substr(key.length()));
-		unsigned char ir[4];
-		ss >> ir[0];
-		ss >> ir[1];
-		ss >> ir[2];
-		ss >> ir[3];
-		if (!ss) {
-			__dbg(signature.str() + ": incomplete");
-			throw Surveyor::OutOfSync();
-		}
+		string irdata = res.substr(key.length());
+		unsigned int ir[4];
+		sscanf(irdata.c_str(), "%x %x %x %x", &ir[0], &ir[1], &ir[2], &ir[3]);
 		// Save the data.
 		ret = IRArray(ir[0], ir[1], ir[2], ir[3]);
 
