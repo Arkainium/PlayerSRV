@@ -28,8 +28,26 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 
 	//* Initialize the maximum time allotted for an executing command.
 	mCmdTimeout = cf->ReadFloat(section, "command_timeout", -1);
-	if (mCmdTimeout < 3.0) {
+	if (mCmdTimeout < 0.0) {
 		mCmdTimeout = 10.0; // seconds
+	}
+
+	//* Debugging support.
+	mDebugSurveyor = cf->ReadBool(section, "debug_surveyor", false);
+	Surveyor::debugging(mDebugSurveyor);
+	mDebugSerial = cf->ReadBool(section, "debug_serial", false);
+	PosixSerial::debugging(mDebugSerial);
+
+	//* Absolute minimum command time for the Surveyor.
+	mSurveyorMinTimeout = cf->ReadInt(section, "srv_min_timeout", -1);
+	if (mSurveyorMinTimeout < 0) {
+		mSurveyorMinTimeout = 600; // milliseconds
+	}
+
+	//* Absolute maximum command time for the Surveyor.
+	mSurveyorMaxTimeout = cf->ReadInt(section, "srv_max_timeout", -1);
+	if (mSurveyorMaxTimeout < 0) {
+		mSurveyorMaxTimeout = 3000; // milliseconds
 	}
 
 	//* Add the interfaces that we're providing.
@@ -130,6 +148,8 @@ int PlayerSRV::MainSetup()
 			mSurveyorMutex.unlock();
 			return -1;
 		}
+		mSurveyor->minTimeout(mSurveyorMinTimeout);
+		mSurveyor->maxTimeout(mSurveyorMaxTimeout);
 		mSurveyorMutex.unlock();
 	} catch (Serial::ConnectionFailure) {
 		PLAYER_ERROR("PlayerSRV: failed to open port");

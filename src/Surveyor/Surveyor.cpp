@@ -29,9 +29,10 @@ const double Surveyor::gHeight = 0.0800; // π inches.
 Surveyor::Surveyor(const string& devName)
 :mDevLink(devName.c_str(), B115200)
 {
-	// Set the global timeout to 2.6 seconds because a timed drive
-	// can block all communication for up to 2.55 seconds.
-	mDevLink.timeout(2600);
+	// Default timeouts (in milliseconds).
+	mMaxTimeout = 3000;
+	mMinTimeout = 600;
+	mDevLink.timeout(mMaxTimeout);
 
 	// Establish a connection.
 	__dbg("Surveyor: connecting to " + devName);
@@ -68,14 +69,19 @@ string Surveyor::getVersion()
 {
 	string ret;
 	try {
+		// This is a quick command.
+		// Reduce the timeout temporarily to increase performance.
+		mDevLink.timeout(mMinTimeout);
 		mDevLink.flush();
 		mDevLink.putByte('V');
 		mDevLink.flushOutput();
 		ret = mDevLink.getLine();
+		mDevLink.timeout(mMaxTimeout);
 		if (ret.find("##Version") == string::npos) {
 			throw Surveyor::OutOfSync();
 		}
 	} catch (PosixSerial::ReadTimeout) {
+		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
 	return ret;
@@ -114,18 +120,25 @@ void Surveyor::drive(int l, int r, int t)
 	cmd[3] = t & 0xFF;
 
 	try {
+		if (t == 0) {
+			// This is not a timed drive.
+			// Reduce timeout to increase performance.
+			mDevLink.timeout(mMinTimeout);
+		}
 		mDevLink.flush();
 		mDevLink.putBlock(cmd, 4);
 		mDevLink.flushOutput();
 		string echo;
 		echo += mDevLink.getByte();
 		echo += mDevLink.getByte();
+		mDevLink.timeout(mMaxTimeout);
 		if (echo.find("#M") == string::npos) {
 			__dbg(signature.str() + ": incorrect acknowledgment");
 			throw Surveyor::OutOfSync();
 		}
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
 }
@@ -159,18 +172,22 @@ void Surveyor::setResolution(CameraResolution res)
 
 	// Make it so.
 	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
 		mDevLink.flush();
 		mDevLink.putByte(cmd);
 		mDevLink.flushOutput();
 		string echo;
 		echo += mDevLink.getByte();
 		echo += mDevLink.getByte();
+		mDevLink.timeout(mMaxTimeout);
 		if (echo.find(string("#") + cmd) == string::npos) {
 			__dbg(signature.str() + ": incorrect acknowledgment");
 			throw Surveyor::OutOfSync();
 		}
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
 }
@@ -181,8 +198,12 @@ const Picture Surveyor::takePicture()
 	stringstream signature;
 	signature << "Surveyor::takePicture()";
 
+
 	Picture ret;
 	try {
+		// Taking pictures is buggy with the Surveyor.
+		// Reduce the timeout, and try more often.
+		mDevLink.timeout(mMinTimeout);
 		mDevLink.flush();
 		mDevLink.putByte('I');
 		mDevLink.flushOutput();
@@ -192,6 +213,7 @@ const Picture Surveyor::takePicture()
 		echo += mDevLink.getByte(); // 'I'
 		echo += mDevLink.getByte(); // 'M'
 		echo += mDevLink.getByte(); // 'J'
+		mDevLink.timeout(mMaxTimeout);
 		if (echo.find("##IMJ") == string::npos) {
 			__dbg(signature.str() + ": incorrect acknowledgment");
 			throw Surveyor::OutOfSync();
@@ -243,6 +265,7 @@ const Picture Surveyor::takePicture()
 		}
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
 	return ret;
@@ -256,11 +279,14 @@ const IRArray Surveyor::bounceIR()
 
 	IRArray ret;
 	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
 		mDevLink.flush();
 		mDevLink.putByte('B');
 		mDevLink.flushOutput();
 		string res = mDevLink.getLine();
 		string key = "##BounceIR - ";
+		mDevLink.timeout(mMaxTimeout);
 		if (res.find(key) == string::npos) {
 			__dbg(signature.str() + ": incorrect acknowledgment");
 			throw Surveyor::OutOfSync();
@@ -268,7 +294,7 @@ const IRArray Surveyor::bounceIR()
 
 		// Get the data.
 		stringstream ss(res.substr(key.length()));
-		int ir[4];
+		unsigned char ir[4];
 		ss >> ir[0];
 		ss >> ir[1];
 		ss >> ir[2];
@@ -282,6 +308,7 @@ const IRArray Surveyor::bounceIR()
 
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
 	return ret;

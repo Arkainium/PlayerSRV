@@ -97,6 +97,9 @@ class Surveyor
 		const Picture takePicture();
 		const IRArray bounceIR();
 
+		void minTimeout(size_t s) { mMinTimeout = s; }
+		void maxTimeout(size_t s) { mMaxTimeout = s; }
+
 	private:
 		// Don't allow copying or assigning of Surveyor objects!
 		Surveyor(const Surveyor&);
@@ -104,6 +107,10 @@ class Surveyor
 
 		// Serial communication link to the physical robot.
 		metrobotics::PosixSerial mDevLink;
+
+		// Absolute minimum and maximum command time.
+		size_t mMaxTimeout;
+		size_t mMinTimeout;
 
 		// Attributes that are common to all Surveyors
 		// Physical dimensions in meters.

@@ -65,6 +65,8 @@ class PlayerSRV : public ThreadedDriver
 		std::string  mPortName;
 		Surveyor*    mSurveyor;
 		boost::mutex mSurveyorMutex;
+		size_t       mSurveyorMinTimeout;
+		size_t       mSurveyorMaxTimeout;
 
 		//* Player interfaces.
 		Position2D*  mPosition2D;
@@ -73,6 +75,10 @@ class PlayerSRV : public ThreadedDriver
 		boost::mutex mCameraMutex;
 		Ranger*      mRanger;
 		boost::mutex mRangerMutex;
+
+		//* Debugging.
+		bool mDebugSurveyor;
+		bool mDebugSerial;
 };
 
 //* Standard Player Protocol.
