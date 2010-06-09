@@ -182,6 +182,8 @@ void PlayerSRV::MainQuit()
 		mSurveyor = 0;
 	}
 	mSurveyorMutex.unlock();
+
+	mFunctional = false;
 }
 
 void PlayerSRV::Main()
@@ -192,6 +194,8 @@ void PlayerSRV::Main()
 	PosixTimer tCycle;    // duration of each cycle
 	PosixTimer tCommand;  // duration of the current command
 	PosixTimer tPosition; // time in between position2d updates
+	PosixTimer tCamera;   // time in between camera updates
+	PosixTimer tRanger;   // time in between ranger updates
 
 	while (1) {
 		//* Time the duration of the cycle.
@@ -265,17 +269,15 @@ void PlayerSRV::Main()
 
 		mCameraMutex.lock();
 		if (mCamera) {
-			if (!(mCamera->Active())) {
-				mCamera->Restart();
-			}
+			mCamera->Update(tCamera.elapsed());
+			tCamera.start();
 		}
 		mCameraMutex.unlock();
 
 		mRangerMutex.lock();
 		if (mRanger) {
-			if (!(mRanger->Active())) {
-				mRanger->Restart();
-			}
+			mRanger->Update(tRanger.elapsed());
+			tRanger.start();
 		}
 		mRangerMutex.unlock();
 

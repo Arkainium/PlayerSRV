@@ -3,11 +3,10 @@
 using namespace std;
 using namespace metrobotics;
 
-const int NUM_IR = 4;
-enum { IRFRONT = 0, IRLEFT = 1, IRBACK = 2, IRRIGHT = 3 };
+const int Ranger::NUM_IR = 4;
 
 Ranger::Ranger(PlayerSRV& playerDriver, player_devaddr_t addr)
-:mPlayerDriver(playerDriver), mRangerAddr(addr), mActive(false), mConfState(true)
+:mPlayerDriver(playerDriver), mRangerAddr(addr)
 {
 	// Clear our data structures.
 	memset(&mRangerData, 0, sizeof(player_ranger_data_intns_t));
@@ -15,6 +14,7 @@ Ranger::Ranger(PlayerSRV& playerDriver, player_devaddr_t addr)
 	memset(&mRangerGeom, 0, sizeof(player_ranger_geom_t));
 
 	// Fill in the geometry data; it never changes.
+	// FIXME: is this junk really necessary? Probably not.
 	mRangerGeom.pose.py = 0.0635; // Height of base in meters.
 	mRangerGeom.size.sw = mRangerGeom.size.sl = 0.0762;
 	mRangerGeom.element_poses_count = mRangerGeom.element_sizes_count = NUM_IR;
@@ -60,6 +60,14 @@ Ranger::Ranger(PlayerSRV& playerDriver, player_devaddr_t addr)
 		throw logic_error("failed to allocate memory in ranger constructor");
 	}
 	memset(mRangerData.intensities, 0, sizeof(double)*mRangerData.intensities_count);
+
+	// Initial state.
+	mActive = false;
+	mConfState = true;
+
+	// Default frequency.
+	mMinCycleTime = 1.0;
+	mTimeElapsed = 0.0;
 }
 
 Ranger::~Ranger()
@@ -80,6 +88,11 @@ Ranger::~Ranger()
 
 void Ranger::ReadConfig(ConfigFile& cf, int section)
 {
+	// Read in IR update frequency.
+	mMinCycleTime = cf.ReadFloat(section, "ir_min_cycle_time", -1);
+	if (mMinCycleTime < 0.0) {
+		mMinCycleTime = 1.0; // seconds
+	}
 }
 
 int Ranger::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *data)
@@ -125,14 +138,25 @@ int Ranger::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *dat
 void Ranger::Start()
 {
 	if (mConfState && !mActive && mPlayerDriver) {
-		mActive = true;
 		mPlayerDriver.PushCommand(BounceSRV(mPlayerDriver));
+		mActive = true;
+		mTimeElapsed = 0.0;
 	}
 }
 
 void Ranger::Stop()
 {
 	mActive = false;
+}
+
+void Ranger::Update(double t)
+{
+	if (mPlayerDriver && t >= 0.0 && mConfState) {
+		mTimeElapsed += t;
+		if (!mActive && mTimeElapsed >= mMinCycleTime) {
+			Start();
+		}
+	}
 }
 
 void Ranger::Publish(const IRArray& ir)
@@ -151,8 +175,6 @@ void Ranger::Publish(const IRArray& ir)
 		// Publish our data.
 		mPlayerDriver.Publish(mRangerAddr, PLAYER_MSGTYPE_DATA,
 		                      PLAYER_RANGER_DATA_INTNS, (void *)&mRangerData);
-		if (mActive && mConfState) {
-			mPlayerDriver.PushCommand(BounceSRV(mPlayerDriver));
-		}
+		mActive = false;
 	}
 }

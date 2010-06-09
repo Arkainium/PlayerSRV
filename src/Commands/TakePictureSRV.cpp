@@ -16,7 +16,7 @@ int TakePictureSRV_Implementation::priority() const
 {
 	// FIXME: What priority should this be?
 	// Active commands should have higher priority than passive commands.
-	return 10;
+	return 25;
 }
 
 string TakePictureSRV_Implementation::id() const

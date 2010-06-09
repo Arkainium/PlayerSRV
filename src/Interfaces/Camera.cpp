@@ -6,8 +6,15 @@ using namespace std;
 using namespace metrobotics;
 
 Camera::Camera(PlayerSRV& playerDriver, player_devaddr_t addr)
-:mPlayerDriver(playerDriver), mCameraAddr(addr), mActive(false)
+:mPlayerDriver(playerDriver), mCameraAddr(addr)
 {
+	// Initial state.
+	mInitialized = false;
+	mActive = false;
+
+	// Default frequency.
+	mMinCycleTime = 1.0;
+	mTimeElapsed = 0.0;
 }
 
 void Camera::ReadConfig(ConfigFile& cf, int section)
@@ -31,11 +38,16 @@ void Camera::ReadConfig(ConfigFile& cf, int section)
 		PLAYER_ERROR1("Camera: %s is not a valid camera resolution", str.c_str());
 	}
 
+	// Read in camera update frequency.
+	mMinCycleTime = cf.ReadFloat(section, "cam_min_cycle_time", -1);
+	if (mMinCycleTime < 0.0) {
+		mMinCycleTime = 1.0; // seconds
+	}
 }
 
 void Camera::Start()
 {
-	if (!mActive && mPlayerDriver) {
+	if (!mInitialized && mPlayerDriver) {
 		// Apply the camera size.
 		bool lockedSurveyor = false;
 		try {
@@ -57,10 +69,9 @@ void Camera::Start()
 			lockedSurveyor = false;
 
 			if (fDone) {
-				mActive = true;
-				mPlayerDriver.PushCommand(TakePictureSRV(mPlayerDriver));
+				mInitialized = true;
 			} else {
-				mActive = false;
+				mInitialized = false;
 				PLAYER_ERROR("Camera: failed to start camera");
 			}
 		} catch (...) {
@@ -70,11 +81,28 @@ void Camera::Start()
 			}
 		}
 	}
+
+	if (!mActive && mInitialized && mPlayerDriver) {
+		mPlayerDriver.PushCommand(TakePictureSRV(mPlayerDriver));
+		mActive = true;
+		mTimeElapsed = 0.0;
+	}
 }
 
 void Camera::Stop()
 {
+	mInitialized = false;
 	mActive = false;
+}
+
+void Camera::Update(double t)
+{
+	if (mPlayerDriver && t >= 0.0) {
+		mTimeElapsed += t;
+		if (!mActive && mTimeElapsed >= mMinCycleTime) {
+			Start();
+		}
+	}
 }
 
 void Camera::Publish(const Picture& pic)
@@ -100,8 +128,6 @@ void Camera::Publish(const Picture& pic)
 			mPlayerDriver.Publish(mCameraAddr, PLAYER_MSGTYPE_DATA,
 			                      PLAYER_CAMERA_DATA_STATE, (void *)&camData);
 		}
-		if (mActive) {
-			mPlayerDriver.PushCommand(TakePictureSRV(mPlayerDriver));
-		}
+		mActive = false;
 	}
 }

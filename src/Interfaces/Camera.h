@@ -24,6 +24,10 @@ class Camera
 		void Stop();
 		void Restart() { Stop(); Start(); }
 
+		//* Update camera data.
+		//* params: t is the time in seconds since the last update
+		void Update(double t);
+
 		//* Publish camera data.
 		void Publish(const Picture& pic);
 
@@ -36,8 +40,13 @@ class Camera
 
 		//* Internal state of the interface.
 		//* Active means that we're repeatedly taking and publishing new pictures.
+		bool mInitialized;
 		bool mActive;
 		Surveyor::CameraResolution mCamRes;
+
+		//* Frequency of updates. (in seconds)
+		double mMinCycleTime;
+		double mTimeElapsed;
 };
 
 #endif
