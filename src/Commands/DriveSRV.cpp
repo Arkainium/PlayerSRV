@@ -44,11 +44,8 @@ string DriveSRV_Implementation::id() const
 
 void DriveSRV_Implementation::operator()()
 {
-	bool lockedSurveyor = false;
-	bool lockedPosition = false;
 	try {
 		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
-		lockedSurveyor = true;
 
 		bool fDone = false;
 		while (!fDone) {
@@ -68,19 +65,17 @@ void DriveSRV_Implementation::operator()()
 		}
 
 		// Update position2d data.
-		Position2D& pos = mPlayerDriver.LockPosition2D();
-		lockedPosition = true;
-		pos.Update(mLinearVelocity, mAngularVelocity,
-				   (mTimeToDrive <= 0 ? -1 : mTimeToDrive/100.0));
-		mPlayerDriver.UnlockPosition2D();
-
-		mPlayerDriver.UnlockSurveyor();
-	} catch (...) {
-		if (lockedPosition) {
+		try {
+			Position2D& pos = mPlayerDriver.LockPosition2D();
+			pos.Update(mLinearVelocity, mAngularVelocity,
+			          (mTimeToDrive <= 0 ? -1 : mTimeToDrive/100.0));
+			mPlayerDriver.UnlockPosition2D();
+		} catch (std::logic_error) {
 			mPlayerDriver.UnlockPosition2D();
 		}
-		if (lockedSurveyor) {
-			mPlayerDriver.UnlockSurveyor();
-		}
+		mPlayerDriver.UnlockSurveyor();
+	} catch (std::logic_error) {
+		mPlayerDriver.UnlockPosition2D();
+		mPlayerDriver.UnlockSurveyor();
 	}
 }

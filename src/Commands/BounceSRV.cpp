@@ -24,11 +24,8 @@ string BounceSRV_Implementation::id() const
 
 void BounceSRV_Implementation::operator()()
 {
-	bool lockedSurveyor = false;
-	bool lockedRanger   = false;
 	try {
 		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
-		lockedSurveyor = true;
 
 		IRArray ir;
 		bool fDone = false;
@@ -43,35 +40,30 @@ void BounceSRV_Implementation::operator()()
 					boost::this_thread::interruption_point();
 				} catch (boost::thread_interrupted) {
 					// Stop the ranger interface.
-					Ranger& ranger = mPlayerDriver.LockRanger();
-					lockedRanger = true;
-					ranger.Stop();
-					mPlayerDriver.UnlockRanger();
-					lockedRanger = false;
+					try {
+						Ranger& ranger = mPlayerDriver.LockRanger();
+						ranger.Stop();
+						mPlayerDriver.UnlockRanger();
+					} catch (std::logic_error) {
+						mPlayerDriver.UnlockRanger();
+					}
 					mPlayerDriver.UnlockSurveyor();
-					lockedSurveyor = false;
 					return;
 				}
 			}
 		}
 
 		// Publish ranger data.
-		Ranger& ranger = mPlayerDriver.LockRanger();
-		lockedRanger = true;
-		ranger.Publish(ir);
-		mPlayerDriver.UnlockRanger();
-		lockedRanger = false;
-
-		mPlayerDriver.UnlockSurveyor();
-		lockedSurveyor = false;
-	} catch (...) {
-		if (lockedRanger) {
+		try {
+			Ranger& ranger = mPlayerDriver.LockRanger();
+			ranger.Publish(ir);
 			mPlayerDriver.UnlockRanger();
-			lockedRanger = false;
+		} catch (std::logic_error) {
+			mPlayerDriver.UnlockRanger();
 		}
-		if (lockedSurveyor) {
-			mPlayerDriver.UnlockSurveyor();
-			lockedSurveyor = false;
-		}
+		mPlayerDriver.UnlockSurveyor();
+	} catch (std::logic_error) {
+		mPlayerDriver.UnlockRanger();
+		mPlayerDriver.UnlockSurveyor();
 	}
 }

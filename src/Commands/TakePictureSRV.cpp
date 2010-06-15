@@ -26,11 +26,8 @@ string TakePictureSRV_Implementation::id() const
 
 void TakePictureSRV_Implementation::operator()()
 {
-	bool lockedSurveyor = false;
-	bool lockedCamera = false;
 	try {
 		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
-		lockedSurveyor = true;
 
 		Picture pic;
 		while (!pic) {
@@ -42,35 +39,47 @@ void TakePictureSRV_Implementation::operator()()
 					boost::this_thread::interruption_point();
 				} catch (boost::thread_interrupted) {
 					// Stop the camera interface.
-					Camera& cam = mPlayerDriver.LockCamera();
-					lockedCamera = true;
-					cam.Stop();
-					mPlayerDriver.UnlockCamera();
-					lockedCamera = false;
+					try {
+						Camera& cam = mPlayerDriver.LockCamera();
+						cam.Stop();
+						mPlayerDriver.UnlockCamera();
+					} catch (std::logic_error) {
+						mPlayerDriver.UnlockCamera();
+					}
+					// Stop the metrocam interface.
+					try {
+						MetroCam& cam = mPlayerDriver.LockMetroCam();
+						cam.Stop();
+						mPlayerDriver.UnlockMetroCam();
+					} catch (std::logic_error) {
+						mPlayerDriver.UnlockMetroCam();
+					}
 					mPlayerDriver.UnlockSurveyor();
-					lockedSurveyor = false;
 					return;
 				}
 			}
 		}
 
 		// Publish camera data.
-		Camera& cam = mPlayerDriver.LockCamera();
-		lockedCamera = true;
-		cam.Publish(pic);
-		mPlayerDriver.UnlockCamera();
-		lockedCamera = false;
-
-		mPlayerDriver.UnlockSurveyor();
-		lockedSurveyor = false;
-	} catch (...) {
-		if (lockedCamera) {
+		try {
+			Camera& cam = mPlayerDriver.LockCamera();
+			cam.Publish(pic);
 			mPlayerDriver.UnlockCamera();
-			lockedCamera = false;
+		} catch (std::logic_error) {
+			mPlayerDriver.UnlockCamera();
 		}
-		if (lockedSurveyor) {
-			mPlayerDriver.UnlockSurveyor();
-			lockedSurveyor = false;
+		// Publish metrocam data.
+		try {
+			MetroCam& cam = mPlayerDriver.LockMetroCam();
+			cam.Publish(pic);
+			mPlayerDriver.UnlockMetroCam();
+		} catch (std::logic_error) {
+			mPlayerDriver.UnlockMetroCam();
 		}
+		mPlayerDriver.UnlockSurveyor();
+	} catch (std::logic_error) {
+		mPlayerDriver.UnlockCamera();
+		mPlayerDriver.UnlockMetroCam();
+		mPlayerDriver.UnlockSurveyor();
 	}
 }

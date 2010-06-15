@@ -3,6 +3,7 @@
 
 #include "Position2D.h"
 #include "Camera.h"
+#include "MetroCam.h"
 #include "Ranger.h"
 
 #endif

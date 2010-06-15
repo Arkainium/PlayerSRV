@@ -25,10 +25,8 @@ string SyncSRV_Implementation::id() const
 
 void SyncSRV_Implementation::operator()()
 {
-	bool lockedSurveyor = false;
 	try {
 		Surveyor& surveyor = mPlayerDriver.LockSurveyor();
-		lockedSurveyor = true;
 
 		bool fDone = false;
 		while (!fDone) {
@@ -44,11 +42,8 @@ void SyncSRV_Implementation::operator()()
 				}
 			}
 		}
-
 		mPlayerDriver.UnlockSurveyor();
-	} catch (...) {
-		if (lockedSurveyor) {
-			mPlayerDriver.UnlockSurveyor();
-		}
+	} catch (std::logic_error) {
+		mPlayerDriver.UnlockSurveyor();
 	}
 }

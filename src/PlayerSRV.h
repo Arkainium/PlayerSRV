@@ -17,6 +17,7 @@
 //* of the relationships between our classes.
 class Position2D;
 class Camera;
+class MetroCam;
 class Ranger;
 
 class PlayerSRV : public ThreadedDriver
@@ -46,6 +47,7 @@ class PlayerSRV : public ThreadedDriver
 		Surveyor& LockSurveyor(); void UnlockSurveyor();
 		Position2D& LockPosition2D(); void UnlockPosition2D();
 		Camera& LockCamera(); void UnlockCamera();
+		MetroCam& LockMetroCam(); void UnlockMetroCam();
 		Ranger& LockRanger(); void UnlockRanger();
 
 	private:
@@ -73,6 +75,8 @@ class PlayerSRV : public ThreadedDriver
 		boost::mutex mPosition2DMutex;
 		Camera*      mCamera;
 		boost::mutex mCameraMutex;
+		MetroCam*    mMetroCam;
+		boost::mutex mMetroCamMutex;
 		Ranger*      mRanger;
 		boost::mutex mRangerMutex;
 

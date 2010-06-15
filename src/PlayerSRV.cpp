@@ -10,7 +10,7 @@ using namespace metrobotics;
 //* Driver-specific initialization: performed once upon startup of the server.
 PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 : ThreadedDriver(cf, section, false, PLAYER_MSGQUEUE_DEFAULT_MAXLEN),
-  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0), mRanger(0)
+  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0), mMetroCam(0), mRanger(0)
 {
 	//* Configure the driver by reading the configuration file.
 
@@ -83,6 +83,21 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 		PLAYER_WARN("PlayerSRV: not providing a camera interface");
 	}
 
+	//* Are we providing a metrocam interface?
+	if ((cf->ReadDeviceAddr(&tempAddr, section, "provides", PLAYER_METROCAM_CODE, -1, 0) == 0) &&
+	    (AddInterface(tempAddr) == 0)) {
+		mMetroCamMutex.lock();
+		mMetroCam = new MetroCam(*this, tempAddr);
+		if (mMetroCam == 0) {
+			PLAYER_ERROR("PlayerSRV: failed to allocate memory for metrocam");
+		} else {
+			mMetroCam->ReadConfig(*cf, section);
+		}
+		mMetroCamMutex.unlock();
+	} else {
+		PLAYER_WARN("PlayerSRV: not providing a metrocam interface");
+	}
+
 	//* Are we providing a ranger interface?
 	if ((cf->ReadDeviceAddr(&tempAddr, section, "provides", PLAYER_RANGER_CODE, -1, 0) == 0) &&
 	    (AddInterface(tempAddr) == 0)) {
@@ -116,6 +131,13 @@ PlayerSRV::~PlayerSRV()
 		mCamera = 0;
 	}
 	mCameraMutex.unlock();
+
+	mMetroCamMutex.lock();
+	if (mMetroCam) {
+		delete mMetroCam;
+		mMetroCam = 0;
+	}
+	mMetroCamMutex.unlock();
 
 	mRangerMutex.lock();
 	if (mRanger) {
@@ -186,6 +208,12 @@ void PlayerSRV::MainQuit()
 	}
 	mCameraMutex.unlock();
 
+	mMetroCamMutex.lock();
+	if (mMetroCam) {
+		mMetroCam->Stop();
+	}
+	mMetroCamMutex.unlock();
+
 	mPosition2DMutex.lock();
 	if (mPosition2D) {
 		mPosition2D->Reset();
@@ -215,6 +243,7 @@ void PlayerSRV::Main()
 	PosixTimer tCommand;  // duration of the current command
 	PosixTimer tPosition; // time in between position2d updates
 	PosixTimer tCamera;   // time in between camera updates
+	PosixTimer tMetroCam; // time in between metrocam updates
 	PosixTimer tRanger;   // time in between ranger updates
 
 	while (1) {
@@ -294,6 +323,13 @@ void PlayerSRV::Main()
 		}
 		mCameraMutex.unlock();
 
+		mMetroCamMutex.lock();
+		if (mMetroCam) {
+			mMetroCam->Update(tMetroCam.elapsed());
+			tMetroCam.start();
+		}
+		mMetroCamMutex.unlock();
+
 		mRangerMutex.lock();
 		if (mRanger) {
 			mRanger->Update(tRanger.elapsed());
@@ -324,6 +360,14 @@ int PlayerSRV::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *
 		}
 	}
 	mPosition2DMutex.unlock();
+
+	mMetroCamMutex.lock();
+	if (mMetroCam) {
+		if (Message::MatchMessage(msghdr, -1, -1, mMetroCam->Address())) {
+			ret = mMetroCam->ProcessMessage(queue, msghdr, data);
+		}
+	}
+	mMetroCamMutex.unlock();
 
 	mRangerMutex.lock();
 	if (mRanger) {
@@ -398,6 +442,21 @@ Camera& PlayerSRV::LockCamera()
 void PlayerSRV::UnlockCamera()
 {
 	mCameraMutex.unlock();
+}
+
+MetroCam& PlayerSRV::LockMetroCam()
+{
+	mMetroCamMutex.lock();
+	if (mMetroCam == 0) {
+		throw logic_error("PlayerSRV::LockMetroCam(): null pointer exception");
+	} else {
+		return *mMetroCam;
+	}
+}
+
+void PlayerSRV::UnlockMetroCam()
+{
+	mMetroCamMutex.unlock();
 }
 
 Ranger& PlayerSRV::LockRanger()

@@ -37,5 +37,8 @@ Position2D.o: Position2D.cpp Position2D.h ../PlayerSRV.h ../Commands/DriveSRV.h
 Camera.o: Camera.cpp Camera.h ../PlayerSRV.h ../Commands/TakePictureSRV.h
 	$(CC) -c $(CFLAGS) Camera.cpp
 
+MetroCam.o: MetroCam.cpp MetroCam.h ../PlayerSRV.h ../Commands/TakePictureSRV.h
+	$(CC) -c $(CFLAGS) MetroCam.cpp
+
 Ranger.o: Ranger.cpp Ranger.h ../PlayerSRV.h ../Commands/BounceSRV.h
 	$(CC) -c $(CFLAGS) Ranger.cpp
