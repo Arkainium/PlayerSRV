@@ -95,6 +95,7 @@ class Surveyor
 		 */
 		void drive(int left, int right, int duration = 0);
 
+		const YUVRange getColorBin(int bin);
 		void setColorBin(int bin, YUVRange color);
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();

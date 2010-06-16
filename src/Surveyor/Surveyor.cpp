@@ -308,6 +308,47 @@ const IRArray Surveyor::bounceIR()
 	return ret;
 }
 
+const YUVRange Surveyor::getColorBin(int bin)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::getColorBin()";
+
+	if (bin < 0 || bin > 15) {
+		__dbg(signature.str() + ": invalid color bin");
+		throw InvalidColorBin();
+	}
+
+	// Prepare the command.
+	unsigned char cmd[3];
+	cmd[0] = 'v';
+	cmd[1] = 'r';
+	cmd[2] = '0' + bin;
+
+	YUVRange ret;
+	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
+		mDevLink.flush();
+		mDevLink.putBlock(cmd, 3);
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##vr"; key += cmd[2];
+		mDevLink.timeout(mMaxTimeout);
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+		// Extract the YUV data.
+		ret = YUVRange(res.substr(key.length()));
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
+		throw Surveyor::NotResponding();
+	}
+	return ret;
+}
+
 void Surveyor::setColorBin(int bin, YUVRange color)
 {
 	// For debugging purposes.
