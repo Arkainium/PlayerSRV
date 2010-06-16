@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <cstring>
 
 using namespace std;
 using namespace metrobotics;
@@ -305,4 +306,42 @@ const IRArray Surveyor::bounceIR()
 		throw Surveyor::NotResponding();
 	}
 	return ret;
+}
+
+void Surveyor::setColorBin(int bin, YUVRange color)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::setColorBin()";
+
+	if (bin < 0 || bin > 15) {
+		__dbg(signature.str() + ": invalid color bin");
+		throw InvalidColorBin();
+	}
+
+	// Prepare the command.
+	unsigned char cmd[15];
+	cmd[0] = 'v';
+	cmd[1] = 'c';
+	cmd[2] = '0' + bin;
+	memcpy(cmd + 3, color.toHexString().c_str(), 12);
+
+	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
+		mDevLink.flush();
+		mDevLink.putBlock(cmd, 15);
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##vc"; key += cmd[2];
+		mDevLink.timeout(mMaxTimeout);
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
+		throw Surveyor::NotResponding();
+	}
 }

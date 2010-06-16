@@ -18,6 +18,7 @@
 #include "metrobotics.h"
 #include "Picture.h"
 #include "IRArray.h"
+#include "YUVRange.h"
 
 /************************************************************************/
 /* Surveyor Class                                                       */
@@ -34,6 +35,7 @@ class Surveyor
 		class OutOfMemory {};
 		class InvalidSpeed {};
 		class InvalidDuration {};
+		class InvalidColorBin {};
 		class InvalidResolution {};
 
 		// Camera options.
@@ -93,6 +95,7 @@ class Surveyor
 		 */
 		void drive(int left, int right, int duration = 0);
 
+		void setColorBin(int bin, YUVRange color);
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();
 		const IRArray bounceIR();
