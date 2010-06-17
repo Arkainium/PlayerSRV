@@ -31,5 +31,5 @@ clean:
 	rm -rf $(OUTPUT) $(OBJECTS)
 
 # Individual source targets
-Surveyor.o: Surveyor.cpp Surveyor.h Picture.h IRArray.h YUVRange.h Rect.h
+Surveyor.o: Surveyor.cpp Surveyor.h Picture.h IRArray.h YUVRange.h Rect.h Blob.h
 	$(CC) -c $(CFLAGS) Surveyor.cpp

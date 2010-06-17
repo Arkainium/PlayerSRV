@@ -15,11 +15,13 @@
 /************************************************************************/
 
 #include <string>
+#include <list>
 #include "metrobotics.h"
 #include "Picture.h"
 #include "IRArray.h"
 #include "YUVRange.h"
 #include "Rect.h"
+#include "Blob.h"
 
 /************************************************************************/
 /* Surveyor Class                                                       */
@@ -116,6 +118,13 @@ class Surveyor
 		 * \arg      \c bin one of the Surveyor's 16 color bins.
 		 */
 		void setColorBin(int bin, const YUVRange& color);
+
+		/**
+		 * \brief    Locate blobs in the image using the color in the given bin.
+		 * \arg      \c bin one of the Surveyor's 16 color bins.
+		 * \arg      \c blobs is the location where the blobs will be stored
+		 */
+		void getBlobs(int bin, std::list<Blob>& blobs);
 
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();

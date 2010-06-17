@@ -454,3 +454,49 @@ const YUVRange Surveyor::grabColorBin(int bin, const Rect& rect)
 	}
 	return ret;
 }
+
+void Surveyor::getBlobs(int bin, list<Blob>& blobs)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::getBlobs()";
+
+	if (bin < 0 || bin > 15) {
+		__dbg(signature.str() + ": invalid color bin");
+		throw InvalidColorBin();
+	}
+
+	// Prepare the command.
+	unsigned char cmd[3];
+	cmd[0] = 'v';
+	cmd[1] = 'b';
+	cmd[2] = '0' + bin;
+
+	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
+		mDevLink.flush();
+		mDevLink.putBlock(cmd, 3);
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##vb"; key += cmd[2];
+		mDevLink.timeout(mMaxTimeout);
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+		// Extract the blob data.
+		blobs.clear();
+		for (string::size_type i = 5; (i + 12) <= res.length(); i += 12) {
+			string blobStr = res.substr(i, 12);
+			Blob blob(blobStr);
+			if (blob) {
+				blobs.push_back(blob);
+			}
+		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
+		throw Surveyor::NotResponding();
+	}
+}
