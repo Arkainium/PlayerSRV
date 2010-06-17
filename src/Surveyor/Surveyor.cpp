@@ -27,7 +27,7 @@ const double Surveyor::gLength = 0.1270; // 5 inches.
 const double Surveyor::gWidth  = 0.1016; // 4 inches.
 const double Surveyor::gHeight = 0.0800; // π inches.
 
-Surveyor::Surveyor(const string& devName)
+Surveyor::Surveyor(const string& devName, CameraResolution res)
 :mDevLink(devName.c_str(), B115200)
 {
 	// Default timeouts (in milliseconds).
@@ -44,6 +44,22 @@ Surveyor::Surveyor(const string& devName)
 	__dbg("Surveyor: initializing the hardware");
 	sync(0); // block indefinitely until synced
 	__dbg("Surveyor: initialization complete");
+
+	// Set the camera resolution for the first time.
+	bool fDone = false;
+	while (!fDone) {
+		try {
+			setResolution(res);
+			fDone = true;
+		} catch (InvalidResolution) {
+			__dbg("Surveyor: invalid camera resolution");
+			throw;
+		} catch (OutOfSync) {
+			fDone = false;
+		} catch (NotResponding) {
+			fDone = false;
+		}
+	}
 	__dbg("Surveyor: hardware is fully operational");
 }
 
@@ -191,6 +207,7 @@ void Surveyor::setResolution(CameraResolution res)
 		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
+	mCurrentRes = res;
 }
 
 const Picture Surveyor::takePicture()
@@ -349,7 +366,7 @@ const YUVRange Surveyor::getColorBin(int bin)
 	return ret;
 }
 
-void Surveyor::setColorBin(int bin, YUVRange color)
+void Surveyor::setColorBin(int bin, const YUVRange& color)
 {
 	// For debugging purposes.
 	stringstream signature;
@@ -385,4 +402,55 @@ void Surveyor::setColorBin(int bin, YUVRange color)
 		mDevLink.timeout(mMaxTimeout);
 		throw Surveyor::NotResponding();
 	}
+}
+
+const YUVRange Surveyor::grabColorBin(int bin, const Rect& rect)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::grabColorBin()";
+
+	if (bin < 0 || bin > 15) {
+		__dbg(signature.str() + ": invalid color bin");
+		throw InvalidColorBin();
+	}
+
+	// Check bounds of the rectangular region.
+	if (rect.getX1() < 0 || rect.getX1() > 255 ||
+	    rect.getX2() < 0 || rect.getX2() > 255 ||
+	    rect.getY1() < 0 || rect.getY1() > 255 ||
+	    rect.getY2() < 0 || rect.getY2() > 255) {
+		__dbg(signature.str() + ": invalid rectangular region");
+		throw InvalidRect();
+	}
+
+	// Prepare the command.
+	unsigned char cmd[11];
+	cmd[0] = 'v';
+	cmd[1] = 'g';
+	cmd[2] = '0' + bin;
+	memcpy(cmd + 3, rect.toHexString().c_str(), 8);
+
+	YUVRange ret;
+	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
+		mDevLink.flush();
+		mDevLink.putBlock(cmd, 11);
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##vg"; key += cmd[2];
+		mDevLink.timeout(mMaxTimeout);
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+		// Extract the YUV data.
+		ret = YUVRange(res.substr(key.length()));
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
+		throw Surveyor::NotResponding();
+	}
+	return ret;
 }

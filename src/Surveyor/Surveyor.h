@@ -19,6 +19,7 @@
 #include "Picture.h"
 #include "IRArray.h"
 #include "YUVRange.h"
+#include "Rect.h"
 
 /************************************************************************/
 /* Surveyor Class                                                       */
@@ -33,6 +34,7 @@ class Surveyor
 		class NotResponding {};
 		class OutOfSync {};
 		class OutOfMemory {};
+		class InvalidRect {};
 		class InvalidSpeed {};
 		class InvalidDuration {};
 		class InvalidColorBin {};
@@ -70,7 +72,7 @@ class Surveyor
 		 * \arg      \c devName is the name of the physical device to
 		 *                      which to bind the object
 		 */
-		Surveyor(const std::string& devName);
+		Surveyor(const std::string& devName, CameraResolution res = CAMSIZE_160x128);
 
 		/**
 		 * \brief    Synchronize with the Surveyor.
@@ -95,8 +97,26 @@ class Surveyor
 		 */
 		void drive(int left, int right, int duration = 0);
 
+		/**
+		 * \brief    Recall colors that are currently in the color bins.
+		 * \arg      \c bin one of the Surveyor's 16 color bins.
+		 */
 		const YUVRange getColorBin(int bin);
-		void setColorBin(int bin, YUVRange color);
+
+		/**
+		 * \brief    Sample colors by grabbing a rectangular area on the image;
+		 *           the value returned is automatically save to the color bin.
+		 * \arg      \c bin one of the Surveyor's 16 color bins.
+		 * \arg      \c rect is the rectangular region of the object
+		 */
+		const YUVRange grabColorBin(int bin, const Rect& rect);
+
+		/**
+		 * \brief    Manually set colors that are stored in the color bins.
+		 * \arg      \c bin one of the Surveyor's 16 color bins.
+		 */
+		void setColorBin(int bin, const YUVRange& color);
+
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();
 		const IRArray bounceIR();
@@ -111,6 +131,9 @@ class Surveyor
 
 		// Serial communication link to the physical robot.
 		metrobotics::PosixSerial mDevLink;
+
+		// Currently set image resolution.
+		CameraResolution mCurrentRes;
 
 		// Absolute minimum and maximum command time.
 		size_t mMaxTimeout;
