@@ -6,10 +6,12 @@
 #include <ios>
 #include <iomanip>
 #include <cstdio>
+#include <algorithm>
 
 class YUVRange
 {
 	public:
+		// explicit ranges
 		YUVRange(unsigned int yMin = 0, unsigned int yMax = 0,
                  unsigned int uMin = 0, unsigned int uMax = 0,
                  unsigned int vMin = 0, unsigned int vMax = 0)
@@ -17,6 +19,7 @@ class YUVRange
 		          mUmin(uMin), mUmax(uMax),
 		          mVmin(vMin), mVmax(vMax) { }
 
+		// implicit from Surveyor's responses
 		YUVRange(const std::string& hex) {
 			*this = YUVRange(); // Initialize to default.
 			if (hex.length() >= 12) {
@@ -27,6 +30,33 @@ class YUVRange
 				sscanf(hex.substr( 8,2).c_str(), "%x", &mVmin);
 				sscanf(hex.substr(10,2).c_str(), "%x", &mVmax);
 			}
+		}
+
+		// Addition of YUV ranges is defined as taking the union of ranges.
+		YUVRange& operator+=(const YUVRange& rhs) {
+			mYmin = std::min(mYmin, rhs.mYmin);
+			mYmax = std::max(mYmax, rhs.mYmax);
+			mUmin = std::min(mUmin, rhs.mUmin);
+			mUmax = std::max(mUmax, rhs.mUmax);
+			mVmin = std::min(mVmin, rhs.mVmin);
+			mVmax = std::max(mVmax, rhs.mVmax);
+			return *this;
+		}
+		YUVRange operator+(const YUVRange& rhs) const {
+			YUVRange ret = *this;
+			ret += *this;
+			ret += rhs;
+			return ret;
+		}
+
+		bool operator==(const YUVRange& rhs) const {
+			return mYmin == rhs.mYmin && mYmax == rhs.mYmax &&
+			       mUmin == rhs.mUmin && mUmax == rhs.mUmax && 
+			       mVmin == rhs.mVmin && mVmax == rhs.mVmax;
+		}
+
+		bool operator!=(const YUVRange& rhs) const {
+			return !(*this == rhs);
 		}
 
 		void setY(unsigned int min, unsigned int max) { mYmin = min; mYmax = max; }

@@ -5,5 +5,6 @@
 #include "Camera.h"
 #include "MetroCam.h"
 #include "Ranger.h"
+#include "BlobFinder.h"
 
 #endif

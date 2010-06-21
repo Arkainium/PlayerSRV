@@ -19,6 +19,7 @@ class Position2D;
 class Camera;
 class MetroCam;
 class Ranger;
+class BlobFinder;
 
 class PlayerSRV : public ThreadedDriver
 {
@@ -49,6 +50,7 @@ class PlayerSRV : public ThreadedDriver
 		Camera& LockCamera(); void UnlockCamera();
 		MetroCam& LockMetroCam(); void UnlockMetroCam();
 		Ranger& LockRanger(); void UnlockRanger();
+		BlobFinder& LockBlobFinder(); void UnlockBlobFinder();
 
 	private:
 		//* Internal state of the driver.
@@ -79,6 +81,8 @@ class PlayerSRV : public ThreadedDriver
 		boost::mutex mMetroCamMutex;
 		Ranger*      mRanger;
 		boost::mutex mRangerMutex;
+		BlobFinder*  mBlobFinder;
+		boost::mutex mBlobFinderMutex;
 
 		//* Debugging.
 		bool mDebugSurveyor;

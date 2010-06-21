@@ -40,5 +40,8 @@ Camera.o: Camera.cpp Camera.h ../PlayerSRV.h ../Commands/TakePictureSRV.h
 MetroCam.o: MetroCam.cpp MetroCam.h ../PlayerSRV.h ../Commands/TakePictureSRV.h
 	$(CC) -c $(CFLAGS) MetroCam.cpp
 
+BlobFinder.o: BlobFinder.cpp BlobFinder.h ../PlayerSRV.h ../Commands/GetBlobsSRV.h
+	$(CC) -c $(CFLAGS) BlobFinder.cpp
+
 Ranger.o: Ranger.cpp Ranger.h ../PlayerSRV.h ../Commands/BounceSRV.h
 	$(CC) -c $(CFLAGS) Ranger.cpp

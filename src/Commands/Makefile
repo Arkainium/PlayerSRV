@@ -49,3 +49,7 @@ TakePictureSRV.o: TakePictureSRV.cpp TakePictureSRV.h Command.h \
 BounceSRV.o: BounceSRV.cpp BounceSRV.h Command.h \
             ../PlayerSRV.h ../Surveyor/Surveyor.h
 	$(CC) -c $(CFLAGS) BounceSRV.cpp
+
+GetBlobsSRV.o: GetBlobsSRV.cpp GetBlobsSRV.h Command.h \
+            ../PlayerSRV.h ../Surveyor/Surveyor.h
+	$(CC) -c $(CFLAGS) GetBlobsSRV.cpp

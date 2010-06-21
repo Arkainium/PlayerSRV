@@ -6,5 +6,6 @@
 #include "DriveSRV.h"
 #include "TakePictureSRV.h"
 #include "BounceSRV.h"
+#include "GetBlobsSRV.h"
 
 #endif

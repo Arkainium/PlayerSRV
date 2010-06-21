@@ -10,7 +10,7 @@ using namespace metrobotics;
 //* Driver-specific initialization: performed once upon startup of the server.
 PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 : ThreadedDriver(cf, section, false, PLAYER_MSGQUEUE_DEFAULT_MAXLEN),
-  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0), mMetroCam(0), mRanger(0)
+  mCmdThread(0), mSurveyor(0), mPosition2D(0), mCamera(0), mMetroCam(0), mRanger(0), mBlobFinder(0)
 {
 	//* Configure the driver by reading the configuration file.
 
@@ -112,6 +112,21 @@ PlayerSRV::PlayerSRV(ConfigFile *cf, int section)
 	} else {
 		PLAYER_WARN("PlayerSRV: not providing a ranger interface");
 	}
+
+	//* Are we providing a blobfinder interface?
+	if ((cf->ReadDeviceAddr(&tempAddr, section, "provides", PLAYER_BLOBFINDER_CODE, -1, 0) == 0) &&
+	    (AddInterface(tempAddr) == 0)) {
+		mBlobFinderMutex.lock();
+		mBlobFinder = new BlobFinder(*this, tempAddr);
+		if (mBlobFinder == 0) {
+			PLAYER_ERROR("PlayerSRV: failed to allocate memory for blobfinder");
+		} else {
+			mBlobFinder->ReadConfig(*cf, section);
+		}
+		mBlobFinderMutex.unlock();
+	} else {
+		PLAYER_WARN("PlayerSRV: not providing a blobfinder interface");
+	}
 }
 
 //* Driver-specific shutdown: performed once upon shutdown of the server.
@@ -145,6 +160,13 @@ PlayerSRV::~PlayerSRV()
 		mRanger = 0;
 	}
 	mRangerMutex.unlock();
+
+	mBlobFinderMutex.lock();
+	if (mBlobFinder) {
+		delete mBlobFinder;
+		mBlobFinder = 0;
+	}
+	mBlobFinderMutex.unlock();
 }
 
 //* Device-specific initialization: called everytime the driver goes from
@@ -196,6 +218,12 @@ void PlayerSRV::MainQuit()
 	PLAYER_MSG0(1, "PlayerSRV: deactivating the driver");
 
 	//* De-activate our interfaces.
+	mBlobFinderMutex.lock();
+	if (mBlobFinder) {
+		mBlobFinder->Stop();
+	}
+	mBlobFinderMutex.unlock();
+
 	mRangerMutex.lock();
 	if (mRanger) {
 		mRanger->Stop();
@@ -239,12 +267,13 @@ void PlayerSRV::Main()
 	PLAYER_MSG0(1, "PlayerSRV: driver is up and running");
 
 	//* Allocate our timers before entering the main loop.
-	PosixTimer tCycle;    // duration of each cycle
-	PosixTimer tCommand;  // duration of the current command
-	PosixTimer tPosition; // time in between position2d updates
-	PosixTimer tCamera;   // time in between camera updates
-	PosixTimer tMetroCam; // time in between metrocam updates
-	PosixTimer tRanger;   // time in between ranger updates
+	PosixTimer tCycle;      // duration of each cycle
+	PosixTimer tCommand;    // duration of the current command
+	PosixTimer tPosition;   // time in between position2d updates
+	PosixTimer tCamera;     // time in between camera updates
+	PosixTimer tMetroCam;   // time in between metrocam updates
+	PosixTimer tRanger;     // time in between ranger updates
+	PosixTimer tBlobFinder; // time in between blobfinder updates
 
 	while (1) {
 		//* Time the duration of the cycle.
@@ -337,6 +366,13 @@ void PlayerSRV::Main()
 		}
 		mRangerMutex.unlock();
 
+		mBlobFinderMutex.lock();
+		if (mBlobFinder) {
+			mBlobFinder->Update(tBlobFinder.elapsed());
+			tBlobFinder.start();
+		}
+		mBlobFinderMutex.unlock();
+
 		//* Don't exceed the minimum cycle time.
 		double timeLeft = mMinCycleTime - tCycle.elapsed();
 		if (timeLeft > 0) {
@@ -376,6 +412,14 @@ int PlayerSRV::ProcessMessage(QueuePointer& queue, player_msghdr *msghdr, void *
 		}
 	}
 	mRangerMutex.unlock();
+
+	mBlobFinderMutex.lock();
+	if (mBlobFinder) {
+		if (Message::MatchMessage(msghdr, -1, -1, mBlobFinder->Address())) {
+			ret = mBlobFinder->ProcessMessage(queue, msghdr, data);
+		}
+	}
+	mBlobFinderMutex.unlock();
 
 	return ret;
 }
@@ -472,6 +516,21 @@ Ranger& PlayerSRV::LockRanger()
 void PlayerSRV::UnlockRanger()
 {
 	mRangerMutex.unlock();
+}
+
+BlobFinder& PlayerSRV::LockBlobFinder()
+{
+	mBlobFinderMutex.lock();
+	if (mBlobFinder == 0) {
+		throw logic_error("PlayerSRV::LockBlobFinder(): null pointer exception");
+	} else {
+		return *mBlobFinder;
+	}
+}
+
+void PlayerSRV::UnlockBlobFinder()
+{
+	mBlobFinderMutex.unlock();
 }
 
 // Driver Class Factory
