@@ -1,3 +1,6 @@
+Patch your player server:
+    1. See the README files in the patches directory.
+
 Build the driver:
     1. Run 'make' to build the driver, or 'make DEBUG=0' to build it
        without any debugging information included (e.g. release version).

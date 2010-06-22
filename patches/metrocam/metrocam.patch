@@ -1,0 +1,694 @@
+diff -Naur player-3.0.1/client_libs/libplayerc/CMakeLists.txt metrocam/client_libs/libplayerc/CMakeLists.txt
+--- player-3.0.1/client_libs/libplayerc/CMakeLists.txt	2009-07-20 01:17:23.000000000 -0400
++++ metrocam/client_libs/libplayerc/CMakeLists.txt	2010-06-15 13:21:01.690987856 -0400
+@@ -54,7 +54,8 @@
+                     dev_stereo.c
+                     dev_vectormap.c
+                     dev_wifi.c
+-                    dev_wsn.c)
++                    dev_wsn.c
++                    dev_metrocam.c)
+ IF (NOT HAVE_GETTIMEOFDAY)
+     SET (playerreplaceLib playerreplace)
+ ENDIF (NOT HAVE_GETTIMEOFDAY)
+diff -Naur player-3.0.1/client_libs/libplayerc/dev_metrocam.c metrocam/client_libs/libplayerc/dev_metrocam.c
+--- player-3.0.1/client_libs/libplayerc/dev_metrocam.c	1969-12-31 19:00:00.000000000 -0500
++++ metrocam/client_libs/libplayerc/dev_metrocam.c	2010-06-15 14:16:13.301012805 -0400
+@@ -0,0 +1,247 @@
++/*
++ *  libplayerc : a Player client library
++ *  Copyright (C) Andrew Howard 2002-2003
++ *
++ *  This program is free software; you can redistribute it and/or
++ *  modify it under the terms of the GNU General Public License
++ *  as published by the Free Software Foundation; either version 2
++ *  of the License, or (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
++ *
++ */
++/*
++ *  Player - One Hell of a Robot Server
++ *  Copyright (C) Andrew Howard 2003
++ *
++ *
++ *  This library is free software; you can redistribute it and/or
++ *  modify it under the terms of the GNU Lesser General Public
++ *  License as published by the Free Software Foundation; either
++ *  version 2.1 of the License, or (at your option) any later version.
++ *
++ *  This library is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ *  Lesser General Public License for more details.
++ *
++ *  You should have received a copy of the GNU Lesser General Public
++ *  License along with this library; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ */
++/***************************************************************************
++ * Desc: metrocam proxy.
++ * Author: Mark Manashirov
++ * Date: 15 June 2010
++ **************************************************************************/
++#include <config.h>
++
++#if HAVE_JPEG
++  #include "libplayerjpeg/playerjpeg.h"
++#endif
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++#if !defined (WIN32)
++  #include <netinet/in.h>
++#endif
++
++#include "playerc.h"
++#include "error.h"
++
++#if defined (WIN32)
++  #define snprintf _snprintf
++#endif
++
++// Local declarations
++void playerc_metrocam_putmsg(playerc_metrocam_t     *device,
++                             player_msghdr_t        *header,
++                             player_metrocam_data_t *data,
++                             size_t len);
++
++// Create a new metrocam proxy
++playerc_metrocam_t *playerc_metrocam_create(playerc_client_t *client, int index)
++{
++  playerc_metrocam_t *device;
++
++  device = malloc(sizeof(playerc_metrocam_t));
++  memset(device, 0, sizeof(playerc_metrocam_t));
++  playerc_device_init(&device->info, client, PLAYER_METROCAM_CODE, index,
++                      (playerc_putmsg_fn_t) playerc_metrocam_putmsg);
++  return device;
++}
++
++
++// Destroy a metrocam proxy
++void playerc_metrocam_destroy(playerc_metrocam_t *device)
++{
++  playerc_device_term(&device->info);
++  free(device->image);
++  free(device);
++}
++
++
++// Subscribe to the metrocam device
++int playerc_metrocam_subscribe(playerc_metrocam_t *device, int access)
++{
++  return playerc_device_subscribe(&device->info, access);
++}
++
++
++// Un-subscribe from the metrocam device
++int playerc_metrocam_unsubscribe(playerc_metrocam_t *device)
++{
++  return playerc_device_unsubscribe(&device->info);
++}
++
++
++// Process incoming data
++void playerc_metrocam_putmsg(playerc_metrocam_t *device, player_msghdr_t *header,
++                             player_metrocam_data_t *data, size_t len)
++{
++  if((header->type == PLAYER_MSGTYPE_DATA) &&
++     (header->subtype == PLAYER_METROCAM_DATA_IMAGE))
++  {
++    device->width        = data->width;
++    device->height       = data->height;
++    device->bpp          = data->bpp;
++    device->format       = data->format;
++    device->fdiv         = data->fdiv;
++    device->compression  = data->compression;
++    device->image_count  = data->image_count;
++    device->image        = realloc(device->image, sizeof(device->image[0])*device->image_count);
++
++    if (device->image)
++      memcpy(device->image, data->image, device->image_count);
++    else
++      PLAYERC_ERR1("failed to allocate memory for image, needed %ld bytes\n", sizeof(device->image[0])*device->image_count);
++  }
++  else
++    PLAYERC_WARN2("skipping camera message with unknown type/subtype: %s/%d\n",
++                 msgtype_to_str(header->type), header->subtype);
++  return;
++}
++
++
++// Decompress image data
++void playerc_metrocam_decompress(playerc_metrocam_t *device)
++{
++  if (device->compression == PLAYER_METROCAM_COMPRESS_RAW)
++  {
++    return;
++  } else
++  {
++#if HAVE_JPEG
++    // Create a temp buffer
++    int dst_size = device->width * device->height * device->bpp / 8;
++    unsigned char * dst = malloc(dst_size);
++
++    // Decompress into temp buffer
++    jpeg_decompress(dst, dst_size, device->image, device->image_count);
++
++    // Copy uncompress image
++    device->image_count = dst_size;
++    device->image = realloc(device->image, sizeof(device->image[0])*device->image_count);
++    if (device->image)
++      memcpy(device->image, dst, dst_size);
++    else
++      PLAYERC_ERR1("failed to allocate memory for image, needed %ld bytes\n", sizeof(device->image[0])*device->image_count);
++    free(dst);
++
++    // Pixels are now raw
++    device->compression = PLAYER_METROCAM_COMPRESS_RAW;
++
++#else
++
++    PLAYERC_ERR("JPEG decompression support was not included at compile-time");
++
++#endif
++  }
++
++  return;
++}
++
++// Save a camera image
++// Assumes the image is RGB888
++void playerc_metrocam_save(playerc_metrocam_t *device, const char *filename)
++{
++  int i;
++  uint8_t pix;
++  FILE *file;
++
++  file = fopen(filename, "w+");
++  if (file == NULL)
++    return;
++
++  // we need to decompress the image
++  playerc_metrocam_decompress(device);
++
++  // Write ppm header
++  fprintf(file, "P6\n%d %d\n%d\n", device->width, device->height, 255);
++
++  // Write data here
++  for (i = 0; i < device->image_count; i++)
++  {
++    if (device->format == PLAYER_METROCAM_FORMAT_RGB888)
++    {
++      pix = device->image[i];
++      fputc(pix, file);
++    }
++    else if (device->format == PLAYER_METROCAM_FORMAT_MONO8)
++    {
++      pix = device->image[i];
++      fputc(pix, file);
++      fputc(pix, file);
++      fputc(pix, file);
++    }
++    else
++    {
++      fprintf(stderr,"unsupported image format");
++      break;
++    }
++  }
++
++  fclose(file);
++
++  return;
++}
++
++int playerc_metrocam_get_config(playerc_metrocam_t *device)
++{
++  player_metrocam_config_t *config;
++  if(playerc_client_request(device->info.client, &device->info, PLAYER_METROCAM_REQ_GET_CONFIG,
++                            NULL, (void**)&config) < 0)
++    return -1;
++  device->frequency = config->frequency;
++  player_metrocam_config_t_free(config);
++  return 0;
++}
++
++int playerc_metrocam_set_config(playerc_metrocam_t *device, uint32_t freq)
++{
++  player_metrocam_config_t config, *resp;
++  config.frequency = freq;
++  if(playerc_client_request(device->info.client, &device->info,
++                            PLAYER_METROCAM_REQ_SET_CONFIG,
++                            (void*)&config, (void**)&resp) < 0)
++    return -1;
++  device->frequency = resp->frequency;
++  player_metrocam_config_t_free(resp);
++  return 0;
++}
++
++int playerc_metrocam_get_image(playerc_metrocam_t *device)
++{
++  // Simply put in a request to update the image.
++  return playerc_client_request(device->info.client, &device->info,
++                                PLAYER_METROCAM_REQ_GET_IMAGE,
++                                NULL, NULL);
++}
+diff -Naur player-3.0.1/client_libs/libplayerc/playerc.h metrocam/client_libs/libplayerc/playerc.h
+--- player-3.0.1/client_libs/libplayerc/playerc.h	2009-08-04 03:25:00.000000000 -0400
++++ metrocam/client_libs/libplayerc/playerc.h	2010-06-15 14:16:11.640982404 -0400
+@@ -1447,6 +1447,85 @@
+ /** @} */
+ /**************************************************************************/
+ 
++/***************************************************************************/
++/** @ingroup playerc_proxies
++ * @defgroup playerc_proxy_metrocam metrocam
++
++The metrocam proxy can be used to get images from a camera.
++
++@{
++*/
++
++/** @brief metrocam proxy data. */
++typedef struct
++{
++  /** Device info; must be at the start of all device structures. */
++  playerc_device_t info;
++
++  /** Image dimensions (pixels). */
++  int width, height;
++
++  /** Image bits-per-pixel (8, 16, 24). */
++  int bpp;
++
++  /** Image format (e.g., RGB888). */
++  int format;
++
++  /** Some images (such as disparity maps) use scaled pixel values;
++      for these images, fdiv specifies the scale divisor (i.e., divide
++      the integer pixel value by fdiv to recover the real pixel value). */
++  int fdiv;
++
++  /** Image compression method. */
++  int compression;
++
++  /** Size of image data (bytes) */
++  int image_count;
++
++  /** Image data (byte aligned, row major order).  Multi-byte image
++      formats (such as MONO16) are automatically converted to the
++      correct host byte ordering.
++  */
++  uint8_t *image;
++
++  /** Frequency of camera updates; a zero frequency means that the user
++      must request camera data manually.
++  */
++  uint32_t frequency;
++
++} playerc_metrocam_t;
++
++
++/** @brief Create a metrocam proxy. */
++PLAYERC_EXPORT playerc_metrocam_t *playerc_metrocam_create(playerc_client_t *client, int index);
++
++/** @brief Destroy a metrocam proxy. */
++PLAYERC_EXPORT void playerc_metrocam_destroy(playerc_metrocam_t *device);
++
++/** @brief Subscribe to the metrocam device. */
++PLAYERC_EXPORT int playerc_metrocam_subscribe(playerc_metrocam_t *device, int access);
++
++/** @brief Un-subscribe from the metrocam device. */
++PLAYERC_EXPORT int playerc_metrocam_unsubscribe(playerc_metrocam_t *device);
++
++/** @brief Decompress the image (modifies the current proxy data). */
++PLAYERC_EXPORT void playerc_metrocam_decompress(playerc_metrocam_t *device);
++
++/** @brief Saves the image to disk as a .ppm */
++PLAYERC_EXPORT void playerc_metrocam_save(playerc_metrocam_t *device, const char *filename);
++
++/** @brief Request camera configuration */
++PLAYERC_EXPORT int playerc_metrocam_get_config(playerc_metrocam_t *device);
++
++/** @brief Apply camera configuration */
++PLAYERC_EXPORT int playerc_metrocam_set_config(playerc_metrocam_t *device, uint32_t freq);
++
++/** @brief Apply camera configuration */
++PLAYERC_EXPORT int playerc_metrocam_get_image(playerc_metrocam_t *device);
++
++/** @} */
++/**************************************************************************/
++
+ 
+ /**************************************************************************/
+ /** @ingroup playerc_proxies
+diff -Naur player-3.0.1/client_libs/libplayerc++/CMakeLists.txt metrocam/client_libs/libplayerc++/CMakeLists.txt
+--- player-3.0.1/client_libs/libplayerc++/CMakeLists.txt	2009-08-03 23:48:04.000000000 -0400
++++ metrocam/client_libs/libplayerc++/CMakeLists.txt	2010-06-15 13:23:26.835117348 -0400
+@@ -207,7 +207,8 @@
+                         speechrecognitionproxy.cc
+                         vectormapproxy.cc
+                         wifiproxy.cc
+-                        wsnproxy.cc)
++                        wsnproxy.cc
++                        metrocamproxy.cc)
+ 
+     IF (NOT HAVE_NANOSLEEP)
+         SET (playerreplaceLib playerreplace)
+diff -Naur player-3.0.1/client_libs/libplayerc++/metrocamproxy.cc metrocam/client_libs/libplayerc++/metrocamproxy.cc
+--- player-3.0.1/client_libs/libplayerc++/metrocamproxy.cc	1969-12-31 19:00:00.000000000 -0500
++++ metrocam/client_libs/libplayerc++/metrocamproxy.cc	2010-06-15 14:19:19.963466059 -0400
+@@ -0,0 +1,154 @@
++/*
++ *  Player - One Hell of a Robot Server
++ *  Copyright (C) 2000-2003
++ *     Brian Gerkey, Kasper Stoy, Richard Vaughan, & Andrew Howard
++ *
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ */
++/********************************************************************
++ *
++ *  This library is free software; you can redistribute it and/or
++ *  modify it under the terms of the GNU Lesser General Public
++ *  License as published by the Free Software Foundation; either
++ *  version 2.1 of the License, or (at your option) any later version.
++ *
++ *  This library is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ *  Lesser General Public License for more details.
++ *
++ *  You should have received a copy of the GNU Lesser General Public
++ *  License along with this library; if not, write to the Free Software
++ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ ********************************************************************/
++
++/*
++ * $Id: cameraproxy.cc 6977 2008-08-25 00:58:33Z gbiggs $
++ */
++
++#include "config.h"
++
++#include <cassert>
++#include <sstream>
++#include <iomanip>
++#if __GNUC__ > 2
++  #include <locale>
++#endif
++
++#include "playerc++.h"
++#include "debug.h"
++
++using namespace PlayerCc;
++
++MetroCamProxy::MetroCamProxy(PlayerClient *aPc, uint32_t aIndex)
++  : ClientProxy(aPc, aIndex),
++  mDevice(NULL),
++  mPrefix("image"),
++  mFrameNo(0)
++{
++  Subscribe(aIndex);
++  // how can I get this into the clientproxy.cc?
++  // right now, we're dependent on knowing its device type
++  mInfo = &(mDevice->info);
++}
++
++MetroCamProxy::~MetroCamProxy()
++{
++  Unsubscribe();
++}
++
++void
++MetroCamProxy::Subscribe(uint32_t aIndex)
++{
++  scoped_lock_t lock(mPc->mMutex);
++  mDevice = playerc_metrocam_create(mClient, aIndex);
++  if (NULL==mDevice)
++    throw PlayerError("MetroCamProxy::MetroCamProxy()", "could not create");
++
++  if (0 != playerc_metrocam_subscribe(mDevice, PLAYER_OPEN_MODE))
++    throw PlayerError("MetroCamProxy::MetroCamProxy()", "could not subscribe");
++}
++
++void
++MetroCamProxy::Unsubscribe()
++{
++  assert(NULL!=mDevice);
++  scoped_lock_t lock(mPc->mMutex);
++  playerc_metrocam_unsubscribe(mDevice);
++  playerc_metrocam_destroy(mDevice);
++  mDevice = NULL;
++}
++
++void
++MetroCamProxy::SaveFrame(const std::string aPrefix, uint32_t aWidth)
++{
++  std::ostringstream filename;
++#if __GNUC__ > 2
++  filename.imbue(std::locale(""));
++#endif
++  filename.fill('0');
++
++  filename << aPrefix << std::setw(aWidth) << mFrameNo++;
++  if (GetCompression())
++    filename << ".jpg";
++  else
++    filename << ".ppm";
++
++  scoped_lock_t lock(mPc->mMutex);
++  playerc_metrocam_save(mDevice, filename.str().c_str());
++}
++
++void
++MetroCamProxy::Decompress()
++{
++  scoped_lock_t lock(mPc->mMutex);
++  playerc_metrocam_decompress(mDevice);
++}
++
++void
++MetroCamProxy::RequestConfigure()
++{
++  scoped_lock_t lock(mPc->mMutex);
++  if (0 != playerc_metrocam_get_config(mDevice))
++    throw PlayerError("MetroCamProxy::RequestConfigure()", "error getting config");
++}
++
++void
++MetroCamProxy::Configure(uint32_t freq)
++{
++  scoped_lock_t lock(mPc->mMutex);
++  if (0 != playerc_metrocam_set_config(mDevice, freq))
++    throw PlayerError("MetroCamProxy::Configure()", "error setting config");
++}
++
++void
++MetroCamProxy::RequestImage()
++{
++  scoped_lock_t lock(mPc->mMutex);
++  if (0 != playerc_metrocam_get_image(mDevice))
++    throw PlayerError("MetroCamProxy::RequestImage()", "error getting image");
++}
++
++std::ostream& operator << (std::ostream& os, const PlayerCc::MetroCamProxy& c)
++{
++  return os << c.GetWidth() << "\t"
++            << c.GetHeight() << "\t"
++            << 1/c.GetElapsedTime() << "\t"
++            << c.GetDataTime() << "\t"
++            << (c.GetCompression() ? "compressed" : "");
++}
+diff -Naur player-3.0.1/client_libs/libplayerc++/playerc++.h metrocam/client_libs/libplayerc++/playerc++.h
+--- player-3.0.1/client_libs/libplayerc++/playerc++.h	2009-08-04 03:25:00.000000000 -0400
++++ metrocam/client_libs/libplayerc++/playerc++.h	2010-06-15 13:51:13.701008753 -0400
+@@ -584,6 +584,83 @@
+ 
+ 
+ /**
++The @p MetroCamProxy class can be used to get images from a @ref
++interface_metrocam device. */
++class PLAYERCC_EXPORT MetroCamProxy : public ClientProxy
++{
++
++  private:
++
++    virtual void Subscribe(uint32_t aIndex);
++    virtual void Unsubscribe();
++
++    // libplayerc data structure
++    playerc_metrocam_t *mDevice;
++
++    std::string mPrefix;
++    int mFrameNo;
++
++  public:
++
++    /// Constructor
++    MetroCamProxy (PlayerClient *aPc, uint32_t aIndex=0);
++
++    virtual ~MetroCamProxy();
++
++    /// Save the frame
++    /// @arg aPrefix is the string prefix to name the image.
++    /// @arg aWidth is the number of 0s to pad the image numbering with.
++    void SaveFrame(const std::string aPrefix, uint32_t aWidth=4);
++
++    /// decompress the image
++    void Decompress();
++
++    /// Image color depth
++    uint32_t GetDepth() const { return GetVar(mDevice->bpp); };
++
++    /// Image dimensions (pixels)
++    uint32_t GetWidth() const { return GetVar(mDevice->width); };
++
++    /// Image dimensions (pixels)
++    uint32_t GetHeight() const { return GetVar(mDevice->height); };
++
++    /// @brief Image format
++    /// Possible values include
++    /// - @ref PLAYER_CAMERA_FORMAT_MONO8
++    /// - @ref PLAYER_CAMERA_FORMAT_MONO16
++    /// - @ref PLAYER_CAMERA_FORMAT_RGB565
++    /// - @ref PLAYER_CAMERA_FORMAT_RGB888
++    uint32_t GetFormat() const { return GetVar(mDevice->format); };
++
++    /// Size of the image (bytes)
++    uint32_t GetImageSize() const { return GetVar(mDevice->image_count); };
++
++    /// @brief Image data
++    /// This function copies the image data into the data buffer aImage.
++    /// The buffer should be allocated according to the width, height, and
++    /// depth of the image.  The size can be found by calling @ref GetImageSize().
++    void GetImage(uint8_t* aImage) const
++      {
++        return GetVarByRef(mDevice->image,
++                           mDevice->image+GetVar(mDevice->image_count),
++                           aImage);
++      };
++
++    /// @brief What is the compression type?
++    /// Currently supported compression types are:
++    /// - @ref PLAYER_CAMERA_COMPRESS_RAW
++    /// - @ref PLAYER_CAMERA_COMPRESS_JPEG
++    uint32_t GetCompression() const { return GetVar(mDevice->compression); };
++
++	uint32_t GetFrequency() const { return GetVar(mDevice->frequency); };
++	void     RequestConfigure();
++	void     Configure(uint32_t freq);
++	void     RequestImage();
++
++};
++
++
++/**
+ The @p DioProxy class is used to read from a @ref interface_dio
+ (digital I/O) device.
+ */
+diff -Naur player-3.0.1/libplayerinterface/CMakeLists.txt metrocam/libplayerinterface/CMakeLists.txt
+--- player-3.0.1/libplayerinterface/CMakeLists.txt	2009-08-10 23:44:43.000000000 -0400
++++ metrocam/libplayerinterface/CMakeLists.txt	2010-06-15 13:20:52.381008234 -0400
+@@ -45,7 +45,8 @@
+                     interfaces/062_ranger.def
+                     interfaces/063_vectormap.def
+                     interfaces/064_blackboard.def
+-                    interfaces/065_stereo.def)
++                    interfaces/065_stereo.def
++                    interfaces/999_metrocam.def)
+ 
+ INCLUDE (${PLAYER_CMAKE_DIR}/internal/ProcessInterfaces.cmake)
+ 
+diff -Naur player-3.0.1/libplayerinterface/interfaces/999_metrocam.def metrocam/libplayerinterface/interfaces/999_metrocam.def
+--- player-3.0.1/libplayerinterface/interfaces/999_metrocam.def	1969-12-31 19:00:00.000000000 -0500
++++ metrocam/libplayerinterface/interfaces/999_metrocam.def	2010-06-15 14:16:22.660994376 -0400
+@@ -0,0 +1,66 @@
++description { 
++@brief Camera imagery
++
++The metrocam interface is used to see what the camera sees.
++It differes from the standard camera interface in that it
++allows image data to be requested in addition to being streamed
++continuously to reduce the total amount of bandwidth.
++}
++
++/** Data subtype: update image */
++message { DATA, IMAGE,      1, player_metrocam_data_t };
++/** Request/reply subtype: update image */
++message { REQ,  GET_IMAGE,  1, player_metrocam_data_t };
++/** Request/reply subtype: get configuration */
++message { REQ,  GET_CONFIG, 2, player_metrocam_config_t };
++/** Request/reply subtype: set configuration */
++message { REQ,  SET_CONFIG, 3, player_metrocam_config_t };
++
++/** Image format : 8-bit monochrome. */
++#define PLAYER_METROCAM_FORMAT_MONO8  1
++/** Image format : 16-bit monochrome (network byte order). */
++#define PLAYER_METROCAM_FORMAT_MONO16 2
++/** Image format : 16-bit color (5 bits R, 6 bits G, 5 bits B). */
++#define PLAYER_METROCAM_FORMAT_RGB565 4
++/** Image format : 24-bit color (8 bits R, 8 bits G, 8 bits B). */
++#define PLAYER_METROCAM_FORMAT_RGB888 5
++
++/** Compression method: raw */
++#define PLAYER_METROCAM_COMPRESS_RAW  0
++/** Compression method: jpeg */
++#define PLAYER_METROCAM_COMPRESS_JPEG 1
++
++/** @brief Data: state (@ref PLAYER_METROCAM_DATA_IMAGE) */
++typedef struct player_metrocam_data
++{
++  /** Image dimensions [pixels]. */
++  uint32_t width;
++  /** Image dimensions [pixels]. */
++  uint32_t height;
++  /** Image bits-per-pixel (8, 16, 24, 32). */
++  uint32_t bpp;
++  /** Image format (must be compatible with depth). */
++  uint32_t format;
++  /** Some images (such as disparity maps) use scaled pixel values;
++      for these images, fdiv specifies the scale divisor (i.e., divide
++      the integer pixel value by fdiv to recover the real pixel value). */
++  uint32_t fdiv;
++  /** Image compression; @ref PLAYER_METROCAM_COMPRESS_RAW indicates no
++      compression. */
++  uint32_t compression;
++  /** Size of image data as stored in image buffer (bytes) */
++  uint32_t image_count;
++  /** Compressed image data (byte-aligned, row major order).
++      Multi-byte image formats (such as MONO16) must be converted
++      to network byte ordering. */
++  uint8_t *image;
++} player_metrocam_data_t;
++
++/** @brief Device configuration request (@ref PLAYER_METROCAM_REQ_GET_CONFIG) */
++typedef struct player_metrocam_config
++{
++	/** Frequency of camera updates in milliseconds;
++	    zero disables continuous updates of the camera,
++	    allowing the user to request camera updates manually. */
++	uint32_t frequency;
++} player_metrocam_config_t;

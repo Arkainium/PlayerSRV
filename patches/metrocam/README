@@ -1,0 +1,37 @@
+Purpose:
+
+    In order to alleviate the excessive bandwidth requirements for continuously
+    streaming camera data, I created a new interface for Player called MetroCam that
+    allows the camera data either to be streamed at certain intervals (e.g. every
+    couple of seconds) or manually upon request from the client. To add this
+    interface to your player server, apply the attached patch to the Player source,
+    rebuild, and reinstall.
+
+Applying the patch:
+
+    1. Download the player source.
+    2. Unpack the player source.
+    3. $cd path/to/player/source
+    4. $patch -p1 < path/to/metrocam.patch
+    5. cmake, make, and make install player as before
+
+
+Changes:
+
+    1. Here are the messages that are supported (added) by MetroCam:
+       PLAYER_METROCAM_DATA_IMAGE     (analogous to PLAYER_CAMERA_DATA_STATE)
+       PLAYER_METROCAM_REQ_GET_IMAGE  (a request to refresh the image data)
+       PLAYER_METROCAM_REQ_GET_CONFIG (a request to retrieve the configuration)
+       PLAYER_METROCAM_REQ_SET_CONFIG (a request to change the configuration)
+
+    2. Here are the C++ client proxies that are supported (added) by MetroCam
+       MetroCamProxy: all the functions available to CameraProxy are also
+                      available to MetroCamProxy. In addition, MetroCamProxy
+                      also has the following members which are fairly self-explanatory.
+       MetroCamProxy::Configure(ms : uint) : ms is the interval between camera updates
+                                             in milliseconds (0 turns off automatic updates)
+       MetroCamProxy::RequestConfigure()   : retrieve the current configuration data
+       MetroCamProxy::GetFrequency()       : returns the current interval between updates
+                                             in milliseconds (must call RequestConfigure() first)
+       MetroCamProxy::RequestImage()       : puts in a request to refresh the image data
+
