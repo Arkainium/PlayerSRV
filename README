@@ -10,7 +10,7 @@ Extra tools:
     1. BlobConfig: calibrate blob tracking on the Surveyor in real time;
        This tool is very useful for configuring the blobfinder interface.
         a. Dependencies: SDL, SDL_image, SDL_gfx
-           To install on them Ubuntu, run the following command:
+           To install them on Ubuntu, run the following command:
            'sudo apt-get install libsdl1.2-dev libsdl-image1.2-dev libsdl-gfx1.2-dev'
         b. Run 'make BlobConfig' to build the program.
         c. Run './BlobConfig <dev>' to run the program.

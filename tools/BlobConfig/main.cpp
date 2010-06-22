@@ -191,7 +191,6 @@ int main(int argc, char** argv)
 							int xmax = max(mouseX1, mouseX2) * (80.0/IMAGE_WIDTH);
 							int ymin = min(mouseY1, mouseY2) * (64.0/IMAGE_HEIGHT);
 							int ymax = max(mouseY1, mouseY2) * (64.0/IMAGE_HEIGHT);
-							cerr << "selection: " << xmin << ", " << xmax << ", " << ymin << ", " << ymax << endl;
 							Rect blobWin(xmin, xmax, ymin, ymax);
 							if (!fUpdatingBlobWindow) {
 								if ((blobWindowThread = SDL_CreateThread(UpdateBlobWindow, &blobWin)) == 0) {
