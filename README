@@ -1,12 +1,3 @@
-Dependencies: MetroUtil
-    1. Download MetroUtil from http://github.com/Arkainium/MetroUtil
-    2. Build the library and install it.
-    3. Copy the files into the driver's root directory.
-       The directory tree should look like this:
-            PlayerSRV/MetroUtil
-            PlayerSRV/MetroUtil/include
-            PlayerSRV/MetroUtil/lib
-
 Build the driver:
     1. Run 'make' to build the driver, or 'make DEBUG=0' to build it
        without any debugging information included (e.g. release version).

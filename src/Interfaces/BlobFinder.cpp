@@ -162,7 +162,7 @@ void BlobFinder::Publish(int channel, const list<Blob>& blobs)
 		int blob_id = 0;
 		for (list<Blob>::const_iterator iter = blobs.begin(); iter != blobs.end(); ++iter) {
 			mBlobFinderBlobs[blob_id].id     = blob_id;
-			mBlobFinderBlobs[blob_id].color  = mBlobFinderColors[mActiveChannel];
+			mBlobFinderBlobs[blob_id].color  = mBlobFinderColors[channel];
 			mBlobFinderBlobs[blob_id].area   = iter->getHits();
 			mBlobFinderBlobs[blob_id].left   = iter->getX1();
 			mBlobFinderBlobs[blob_id].right  = iter->getX2();

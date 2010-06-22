@@ -1,5 +1,7 @@
 # Always ignore the following directories
-MetroUtil/
+MetroUtil/doc
+MetroUtil/include
+MetroUtil/lib
 doc/
 include/
 lib/
