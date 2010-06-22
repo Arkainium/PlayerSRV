@@ -13,3 +13,7 @@ temp/
 *.a
 *.so
 a.out
+
+# BlobConfig output files
+/BlobConfig
+/tools/BlobConfig/BlobConfig

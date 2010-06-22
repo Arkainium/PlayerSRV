@@ -6,10 +6,10 @@ export CC    := g++
 export DEBUG ?= 1
 
 # Dependency: MetroUtil
-export METROUTIL := MetroUtil/lib/libMetrobotics.a
+METROUTIL := MetroUtil/lib/libMetrobotics.a
 
 # General targets
-.PHONY: PlayerSRV clean purge
+.PHONY: PlayerSRV BlobConfig clean purge
 
 # Default target: build the driver
 PlayerSRV: $(METROUTIL)
@@ -22,6 +22,7 @@ PlayerSRV: $(METROUTIL)
 		exit 1; \
 	fi
 
+# Dependency: MetroUtil
 $(METROUTIL):
 	@echo Building MetroUtil
 	@$(MAKE) -e --directory="./MetroUtil" install
@@ -31,13 +32,25 @@ $(METROUTIL):
 		exit 1; \
 	fi
 
+# BlobConfig tool
+BlobConfig:
+	@echo Building BlobConfig
+	@$(MAKE) -e --directory="./tools/BlobConfig"
+	@if [ "$$?" == 0 ]; then \
+		cp ./tools/BlobConfig/BlobConfig ./; \
+	else \
+		echo "BlobConfig failed to build"; \
+		exit 1; \
+	fi
+
 # Remove unnecessary output files
 clean:
 	@$(MAKE) -e --directory="./MetroUtil" clean
 	@$(MAKE) -e --directory="./src" clean
+	@$(MAKE) -e --directory="./tools/BlobConfig" clean
 
 # Remove all output files
 purge:
 	@$(MAKE) -e --directory="./MetroUtil" purge
 	@$(MAKE) -e clean
-	@rm -rf libPlayerSRV.so
+	@rm -rf libPlayerSRV.so BlobConfig

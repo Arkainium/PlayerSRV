@@ -6,6 +6,21 @@ Using the driver:
     1. Modify surveyor.cfg to your liking.
     2. Run 'player surveyor.cfg'
 
+Extra tools:
+    1. BlobConfig: calibrate blob tracking on the Surveyor in real time;
+       This tool is very useful for configuring the blobfinder interface.
+        a. Dependencies: SDL, SDL_image, SDL_gfx
+           To install on them Ubuntu, run the following command:
+           'sudo apt-get install libsdl1.2-dev libsdl-image1.2-dev libsdl-gfx1.2-dev'
+        b. Run 'make BlobConfig' to build the program.
+        c. Run './BlobConfig <dev>' to run the program.
+        d. Using the program:
+              -Use the mouse to select regions on the image
+              -'I' key updates the image
+              -'U' key undoes changes
+              -'R' key resets all changes
+              -'P' key prints the current configuration data
+
 About:
     This driver was created for the MetroBotics project at CUNY.
     http://bots.sci.brooklyn.cuny.edu/metrobotics/
