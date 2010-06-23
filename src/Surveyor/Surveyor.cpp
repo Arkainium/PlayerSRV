@@ -487,12 +487,70 @@ void Surveyor::getBlobs(int bin, list<Blob>& blobs)
 		}
 		// Extract the blob data.
 		blobs.clear();
-		for (string::size_type i = 5; (i + 12) <= res.length(); i += 12) {
+		for (string::size_type i = 5; (i + 12) < res.length(); i += 12) {
 			string blobStr = res.substr(i, 12);
 			Blob blob(blobStr);
 			if (blob) {
 				blobs.push_back(blob);
 			}
+		}
+	} catch (PosixSerial::ReadTimeout) {
+		__dbg(signature.str() + ": no response");
+		mDevLink.timeout(mMaxTimeout);
+		throw Surveyor::NotResponding();
+	}
+}
+
+void Surveyor::scanColumns(int bin, vector<int>& cols, ScanType type)
+{
+	// For debugging purposes.
+	stringstream signature;
+	signature << "Surveyor::scanColumns()";
+
+	if (bin < 0 || bin > 15) {
+		__dbg(signature.str() + ": invalid color bin");
+		throw InvalidColorBin();
+	}
+
+	// Prepare the command.
+	unsigned char cmd[3];
+	cmd[0] = 'v';
+	switch (type) {
+		case SCAN_FIRST_MATCH: {
+			cmd[1] = 'f';
+		} break;
+		case SCAN_FIRST_MISMATCH: {
+			cmd[1] = 's';
+		} break;
+		case SCAN_MATCH_COUNT: {
+			cmd[1] = 'n';
+		} break;
+		default: {
+			__dbg(signature.str() + ": invalid scan type");
+			throw InvalidScanType();
+		} break;
+	}
+	cmd[2] = '0' + bin;
+
+	try {
+		// Reduce timeout to increase performance.
+		mDevLink.timeout(mMinTimeout);
+		mDevLink.flush();
+		mDevLink.putBlock(cmd, 3);
+		mDevLink.flushOutput();
+		string res = mDevLink.getLine();
+		string key = "##v"; key += cmd[1]; key += cmd[2];
+		mDevLink.timeout(mMaxTimeout);
+		if (res.find(key) == string::npos) {
+			__dbg(signature.str() + ": incorrect acknowledgment");
+			throw Surveyor::OutOfSync();
+		}
+		// Extract the column data.
+		cols.clear(); cols.reserve(80);
+		for (string::size_type i = 5; (i + 2) < res.length(); i += 2) {
+			int value = 0;
+			sscanf(res.substr(i, 2).c_str(), "%x", &value);
+			cols.push_back(value);
 		}
 	} catch (PosixSerial::ReadTimeout) {
 		__dbg(signature.str() + ": no response");

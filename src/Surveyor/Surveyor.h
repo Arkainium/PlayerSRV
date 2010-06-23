@@ -15,6 +15,7 @@
 /************************************************************************/
 
 #include <string>
+#include <vector>
 #include <list>
 #include "metrobotics.h"
 #include "Picture.h"
@@ -40,6 +41,7 @@ class Surveyor
 		class InvalidSpeed {};
 		class InvalidDuration {};
 		class InvalidColorBin {};
+		class InvalidScanType {};
 		class InvalidResolution {};
 
 		// Camera options.
@@ -48,6 +50,13 @@ class Surveyor
 			CAMSIZE_160x128,
 			CAMSIZE_320x240,
 			CAMSIZE_640x480
+		};
+
+		// Vision-scanning options.
+		enum ScanType {
+			SCAN_FIRST_MATCH,
+			SCAN_FIRST_MISMATCH,
+			SCAN_MATCH_COUNT
 		};
 
 		/**
@@ -125,6 +134,14 @@ class Surveyor
 		 * \arg      \c blobs is the location where the blobs will be stored
 		 */
 		void getBlobs(int bin, std::list<Blob>& blobs);
+
+		/**
+		 * \brief    Uses the given color bin to scan all the columns in the image.
+		 * \arg      \c bin one of the Surveyor's 16 color bins.
+		 * \arg      \c cols is the location where the scan results will be stored
+		 * \arg      \c type is the type of scan to perform
+		 */
+		void scanColumns(int bin, std::vector<int>& cols, ScanType type);
 
 		void setResolution(CameraResolution res = CAMSIZE_160x128);
 		const Picture takePicture();
